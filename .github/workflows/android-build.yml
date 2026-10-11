@@ -32,14 +32,17 @@ jobs:
           targets: aarch64-linux-android
 
       - name: Compile GASTROengine JNI Rust Module (libgastro_engine_jni.so)
+        working-directory: app/src/main/rust/gastro_engine_jni
         run: |
-          cargo install cargo-ndk
-          mkdir -p app/src/main/jniLibs/arm64-v8a
-          if [ -d "$ANDROID_NDK_LATEST_HOME" ]; then
+          cargo install cargo-ndk --locked || cargo install cargo-ndk
+          mkdir -p ../jniLibs/arm64-v8a ../assets/bin/arm64-v8a
+          if [ -n "$ANDROID_NDK_LATEST_HOME" ] && [ -d "$ANDROID_NDK_LATEST_HOME" ]; then
             export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          elif [ -n "$ANDROID_HOME" ] && [ -d "$ANDROID_HOME/ndk" ]; then
+            export ANDROID_NDK_HOME="$(ls -d $ANDROID_HOME/ndk/* | tail -n 1)"
           fi
-          cargo ndk -t arm64-v8a -o app/src/main/jniLibs build --release --manifest-path app/src/main/rust/gastro_engine_jni/Cargo.toml
-          cp -f app/src/main/jniLibs/arm64-v8a/libgastro_engine_jni.so app/src/main/assets/bin/arm64-v8a/libgastro_engine_jni.so || true
+          cargo ndk -t arm64-v8a -o ../jniLibs build --release
+          cp -f ../jniLibs/arm64-v8a/libgastro_engine_jni.so ../assets/bin/arm64-v8a/libgastro_engine_jni.so || true
           echo "[GASTRO-CI] Compiled genuine AArch64 Rust JNI library: app/src/main/jniLibs/arm64-v8a/libgastro_engine_jni.so"
 
       - name: Inject GEMINI_API_KEY into .env for Secrets Gradle Plugin (Zero Runtime Key Entry)

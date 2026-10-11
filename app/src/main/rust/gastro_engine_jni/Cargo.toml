@@ -1,9 +1,9 @@
 [package]
 name = "gastro_engine_jni"
-version = "2.4.0"
+version = "2.5.0"
 edition = "2021"
 authors = ["GASTRO Engineering Core"]
-description = "JNI-based Rust low-level library (.so ELF64) and proprietary blob management engine for GASTROengine"
+description = "JNI-based Rust low-level library (.so ELF64), .rodata/IOCTL scanner, VNDK bridge & proprietary blob auto-porting engine for GASTROengine"
 
 [lib]
 name = "gastro_engine_jni"
@@ -11,11 +11,6 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 jni = { version = "0.21", default-features = false }
-goblin = { version = "0.8", features = ["elf64", "elf32", "endian_fd"] }
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-sha2 = "0.10"
-crc32fast = "1.4"
 
 [profile.release]
 opt-level = 3
