@@ -52,9 +52,72 @@ class HybridShellEngine(private val binDir: File, private val workspaceDir: File
     var isRootAvailableOnDevice: Boolean = false
         private set
 
+    @Volatile
+    var activeSuBinaryPath: String = "non-root"
+        private set
+
+    @Volatile
+    var activeRootProvider: String = "Userspace Non-Root"
+        private set
+
     suspend fun probeRootAccess(): Boolean = withContext(Dispatchers.IO) {
-        // Never probe /system/bin/su or /sbin/su automatically on startup to avoid SELinux avc denials on unrooted devices
+        // Safe non-blocking startup check without triggering unsolicited su prompts
+        val candidatePaths = listOf(
+            "/sbin/su",
+            "/system/bin/su",
+            "/system/xbin/su",
+            "/debug_ramdisk/su",
+            "/data/adb/ksu/bin/su",
+            "/data/adb/ap/bin/su",
+            "/data/adb/magisk/busybox"
+        )
+        val existingPath = candidatePaths.firstOrNull { runCatching { File(it).exists() }.getOrDefault(false) }
+        if (existingPath != null) {
+            activeSuBinaryPath = existingPath
+        }
+        isRootAvailableOnDevice
+    }
+
+    /**
+     * Explicit Multi-Vector Root Acquisition triggered by the user in EXTRACTME or TopBar:
+     * Tests `su -c id` across Magisk, KernelSU, APatch, `/system/bin/su`, `/sbin/su`, and `/system/xbin/su`.
+     */
+    suspend fun acquireRootMultiVector(onLog: ((String) -> Unit)? = null): Boolean = withContext(Dispatchers.IO) {
+        val candidateCommands = listOf(
+            "su",
+            "/system/bin/su",
+            "/sbin/su",
+            "/system/xbin/su",
+            "/debug_ramdisk/su",
+            "/data/adb/ksu/bin/su",
+            "/data/adb/ap/bin/su"
+        )
+        for (suCmd in candidateCommands) {
+            try {
+                onLog?.invoke("[ROOT-PROBE] Test du vecteur su : $suCmd -c id")
+                val proc = ProcessBuilder(suCmd, "-c", "id; uname -r").redirectErrorStream(true).start()
+                val output = proc.inputStream.bufferedReader().readText().trim()
+                val exit = proc.waitFor()
+                if (exit == 0 && output.contains("uid=0")) {
+                    isRootAvailableOnDevice = true
+                    activeSuBinaryPath = suCmd
+                    activeRootProvider = when {
+                        suCmd.contains("ksu") -> "KernelSU (uid=0)"
+                        suCmd.contains("ap/bin") -> "APatch (uid=0)"
+                        suCmd.contains("debug_ramdisk") || suCmd.contains("sbin") -> "Magisk / Zygisk (uid=0)"
+                        else -> "Root Superuser ($suCmd • uid=0)"
+                    }
+                    currentMode = ExecutionMode.ROOT_LOOPBACK
+                    onLog?.invoke("[ROOT-ACQUIRED] Accès Root confirmé via $activeRootProvider -> $output")
+                    return@withContext true
+                }
+            } catch (_: Exception) {
+                // Continue probing next candidate vector
+            }
+        }
+        onLog?.invoke("[ROOT-FALLBACK] Aucun démon su uid=0 actif détecté. Basculement transparent sur le moteur Hybride Userspace + Sysfs/Getprop.")
         isRootAvailableOnDevice = false
+        activeRootProvider = "Hybrid Userspace + Direct Sysfs Reader"
         false
     }
 

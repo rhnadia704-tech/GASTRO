@@ -543,6 +543,7 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                                 KitchenTab.EXTRACTOR -> ExtractorScreen(
                                     uiState = uiState,
                                     onExecuteExtractMe = viewModel::executeExtractorExtractMe,
+                                    onAcquireRootAccess = viewModel::acquireRootAccessExplicitly,
                                     onRunJniRustBlobManager = viewModel::executeGastroJniBlobAndLibraryManager,
                                     onPatchBlobOrGenerateShim = viewModel::executeSurgicalJniBlobPatchOrShim,
                                     onNavigateToPorter = { viewModel.selectTab(KitchenTab.AUTO_PORTER) },
@@ -570,6 +571,7 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                                 KitchenTab.CREATION -> CreationScreen(
                                     uiState = uiState,
                                     onSelectDecompiledImg = viewModel::selectDecompiledImgFolder,
+                                    onRunAospDecompileAndAiPort = viewModel::runAospSourceDecompilationAndAiAutoPort,
                                     onExecuteMakeImg = viewModel::executeCreationMakeImg,
                                     onExecuteMakeRomZip = viewModel::executeCreationMakeRomZip,
                                     onNavigateToExtractor = { viewModel.selectTab(KitchenTab.EXTRACTOR) }

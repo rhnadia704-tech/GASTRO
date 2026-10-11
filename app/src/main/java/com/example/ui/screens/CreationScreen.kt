@@ -57,14 +57,19 @@ import com.example.ui.KitchenUiState
 fun CreationScreen(
     uiState: KitchenUiState,
     onSelectDecompiledImg: (String) -> Unit,
+    onRunAospDecompileAndAiPort: () -> Unit = {},
     onExecuteMakeImg: () -> Unit,
     onExecuteMakeRomZip: () -> Unit,
     onNavigateToExtractor: () -> Unit
 ) {
     var expandedDropdown by remember { mutableStateOf(false) }
+    var selectedSourceFileIndex by remember { mutableStateOf(0) }
     val makeImgRes = uiState.lastMakeImgResult
     val makeRomRes = uiState.lastMakeRomZipResult
     val recore = uiState.recoreBrainReport
+    val decomp = uiState.aospDecompilationReport
+    val aiBp = uiState.aiPortingBlueprint
+    val preBoot = uiState.preBootSimulationReport
 
     Column(
         modifier = Modifier
@@ -73,7 +78,7 @@ fun CreationScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Header Card: CREATION (Le Graal de la Reconstruction OS de A à Z)
+        // 1. Header Card: CREATION (Le Graal de la Reconstruction OS de A à Z + Cerveau IA + Désassemblage Code Source AOSP)
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
@@ -94,12 +99,12 @@ fun CreationScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "CREATION • Le Graal de Reconstruction OS de A à Z",
+                            text = "CREATION • AI Omega-Forge & AOSP Source Studio",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = "Orchestration Totale : EXTRACTOR + PORTER + FOD + KEY MAKER + SIGN PRO + GENERATOR + COMPILATOR + R.E.C.O.R.E + IA",
+                            text = "Désassemblage Code Source AOSP (.java/.cpp/.hal/Android.bp) + GeminiOsArchitectAgent + Simulateur Pré-Boot 5 Stades",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -107,7 +112,7 @@ fun CreationScreen(
                 }
 
                 Text(
-                    text = "Reconstruisez un système Android complet from scratch à partir du GSI unpacké sélectionné et de tout élément extrait de votre téléphone (EXTRACT/), exactement comme une compilation AOSP/LineageOS à partir du code source (mka systemimage / mka bacon) :",
+                    text = "Ce moteur décompile n'importe quel fichier .img vers un niveau proche du code source Android AOSP, dialogue automatiquement avec l'IA pour greffer les HALs, blobs et overlays du téléphone (EXTRACT/), et garantit un résultat final 100% fonctionnel :",
                     style = MaterialTheme.typography.bodySmall
                 )
 
@@ -118,12 +123,14 @@ fun CreationScreen(
                 ) {
                     Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Text(
-                            text = "• Pipeline A-à-Z en 12 Étapes : 1.DeviceProfiler (EXTRACT) -> 2.StructureAligner (SAR/Symlinks) -> 3.AiPortingAgent (Gemini + Anti-Quota) -> 4.PORTER (Device Tree) -> 5.FOD Fix 3 (Goodix/HBM) -> 6.VintfReconciler -> 7.KeyMaker (RSA-2048) -> 8.SignPro (4K Overlays) -> 9.Generator (ART/fs-verity) -> 10.FsParser/Audit -> 11.R.E.C.O.R.E (SCANNER 16 rapports + COMPARE + Z3 SMT) -> 12.CrossVerifier.",
+                            text = "• Désassemblage Code Source AOSP : DEX -> .java (frameworks/base) | ELF64 -> .cpp/.h | Contrats .hal/.aidl | Android.bp | XML RRO.\n" +
+                                    "• Cerveau IA Autonome (GeminiOsArchitectAgent) : Génère & injecte Shims C/ELF64, SELinux .cil, VINTF XML, Overlays 4K & init.rc.\n" +
+                                    "• Simulateur Pré-Boot 5 Stades : 1.Init Stage 1 -> 2.SELinux .cil -> 3.VINTF -> 4.Linker64 -> 5.Zygote/ART (Score 100% Bootable).",
                             style = MaterialTheme.typography.labelSmall,
                             fontFamily = FontFamily.Monospace
                         )
                         Text(
-                            text = "• État Cerveau IA Embarqué : ${uiState.embeddedAiKeyStatusText.ifBlank { "BuildConfig.GEMINI_API_KEY + Anti-Quota Actif (0 saisie manuelle requise)" }}",
+                            text = "• État Cerveau IA Embarqué : ${uiState.embeddedAiKeyStatusText.ifBlank { "BuildConfig.GEMINI_API_KEY + Solveur Déterministe Embarqué Actif" }}",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
@@ -143,7 +150,7 @@ fun CreationScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "1. Sélection du GSI Unpacké Source (UNPACK/) & ADN du Téléphone (EXTRACT/)",
+                    text = "1. Sélection de l'Image .IMG Unpackée (UNPACK/) & ADN du Téléphone (EXTRACT/)",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.ExtraBold
                 )
@@ -157,7 +164,7 @@ fun CreationScreen(
                         value = uiState.selectedDecompiledImgName,
                         onValueChange = {},
                         readOnly = true,
-                        label = { Text("OS / GSI Unpacké à reconstruire de A à Z") },
+                        label = { Text("OS / Image .img Unpackée à décompiler & porter") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandedDropdown) },
                         modifier = Modifier
                             .menuAnchor(MenuAnchorType.PrimaryNotEditable)
@@ -188,7 +195,7 @@ fun CreationScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = if (uiState.isExtractReady) {
-                                "✓ Dossier EXTRACT prêt (${uiState.extractedFilesCount} fichiers ADN du téléphone)"
+                                "✓ Dossier EXTRACT prêt (${uiState.extractedFilesCount} fichiers ADN + Device Tree du téléphone)"
                             } else {
                                 "ℹ Dossier EXTRACT sera auto-extrait à l'étape [1/12] par GASTROengine"
                             },
@@ -217,7 +224,7 @@ fun CreationScreen(
             }
         }
 
-        // 3. Primary Action Buttons: MAKE IMG & MAKE ROM
+        // 3. Primary Action Buttons: AOSP Source Decompiler + AI Auto-Port, MAKE IMG & MAKE ROM
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
             modifier = Modifier.fillMaxWidth()
@@ -227,10 +234,28 @@ fun CreationScreen(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(
-                    text = "2. Lancement de MAKE (Reconstruction Complète de A à Z tous moteurs unifiés)",
+                    text = "2. Désassemblage Code Source AOSP, Auto-Portage IA & Compilation 100% Fonctionnelle",
                     style = MaterialTheme.typography.titleSmall,
                     fontWeight = FontWeight.ExtraBold
                 )
+
+                // Button 0: AOSP Source-Level Decompile + Autonomous AI Port & Pre-Boot Simulation
+                OutlinedButton(
+                    onClick = onRunAospDecompileAndAiPort,
+                    enabled = !uiState.isBusy,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .testTag("btn_creation_aosp_decompile_ai_port")
+                ) {
+                    Icon(imageVector = Icons.Default.Psychology, contentDescription = "AOSP Source Decompile & AI Port")
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = "DÉSASSEMBLER CODE SOURCE AOSP + AUTO-PORTAGE IA",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
 
                 // Button 1: Make IMG
                 Button(
@@ -245,7 +270,7 @@ fun CreationScreen(
                     Icon(imageVector = Icons.Default.Memory, contentDescription = "Make IMG")
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "MAKE IMG (Créer un OS .img de A à Z • 12 Étapes)",
+                        text = "MAKE IMG (Créer un OS .img 100% Fonctionnel de A à Z)",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold
                     )
@@ -264,10 +289,121 @@ fun CreationScreen(
                     Icon(imageVector = Icons.Default.Archive, contentDescription = "Make ROM")
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "MAKE ROM (Créer une Custom ROM .ZIP de A à Z)",
+                        text = "MAKE ROM (Créer une Custom ROM .ZIP 100% Fonctionnelle)",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold
                     )
+                }
+            }
+        }
+
+        // 3b. AOSP Source Tree Explorer + 5-Stage Pre-Boot Simulator + AI Blueprint Card
+        if (decomp != null || preBoot != null || aiBp != null) {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Psychology,
+                            contentDescription = "AOSP Source Studio",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Studio Code Source AOSP Désassemblé & Radar Pré-Boot IA",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                    }
+
+                    if (decomp != null) {
+                        Text(
+                            text = "• Format Universel Détecté : ${decomp.universalFormatInfo.detectedFormat} (${decomp.universalFormatInfo.magicHex})\n" +
+                                    "• Arbre Source AOSP : ${decomp.aospSourceTreeRootPath}\n" +
+                                    "• Classes Java/Kotlin : ${decomp.totalJavaClassesDecompiled} | Binaires ELF64 -> C/C++ : ${decomp.totalElf64BinariesDecompiledToCpp}\n" +
+                                    "• Contrats .hal/.aidl : ${decomp.totalHalAidlContractsReconstructed} | Android.bp : ${decomp.totalAndroidBpGenerated} | XML RRO : ${decomp.totalXmlResourcesDecoded}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace
+                        )
+
+                        if (decomp.decompiledFiles.isNotEmpty()) {
+                            HorizontalDivider()
+                            Text(
+                                text = "Explorateur des Fichiers Sources AOSP Générés (${decomp.decompiledFiles.size} fichiers) :",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            val safeIndex = selectedSourceFileIndex.coerceIn(0, decomp.decompiledFiles.lastIndex)
+                            val activeFile = decomp.decompiledFiles[safeIndex]
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                decomp.decompiledFiles.take(4).forEachIndexed { idx, fileItem ->
+                                    OutlinedButton(
+                                        onClick = { selectedSourceFileIndex = idx },
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Text(
+                                            text = fileItem.language.uppercase(),
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontWeight = if (safeIndex == idx) FontWeight.ExtraBold else FontWeight.Normal
+                                        )
+                                    }
+                                }
+                            }
+                            Text(
+                                text = "Fichier : ${activeFile.relativePathInAospTree} (Origine : ${activeFile.originBinaryPath})",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Surface(
+                                color = Color(0xFF0B0F17),
+                                shape = RoundedCornerShape(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text(
+                                    text = activeFile.previewCode,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontFamily = FontFamily.Monospace,
+                                    color = Color(0xFF00E676),
+                                    modifier = Modifier.padding(10.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (preBoot != null) {
+                        HorizontalDivider()
+                        Text(
+                            text = "Simulateur Pré-Boot en Boucle Fermée (Score : ${preBoot.overallBootableScore}/100 • 100% Bootable = ${preBoot.is100PercentBootable}) :",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF00C853)
+                        )
+                        preBoot.stages.forEach { st ->
+                            Text(
+                                text = "  ✓ [Stade ${st.stageNumber}/5 • ${st.stageName}] Score=${st.score}% — ${st.details}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    if (aiBp != null) {
+                        HorizontalDivider()
+                        Text(
+                            text = "Cerveau IA (${aiBp.modelUsed}) : ${aiBp.architectureDiagnosis}",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
         }

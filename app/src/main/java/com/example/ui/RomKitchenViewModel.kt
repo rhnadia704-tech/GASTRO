@@ -9,6 +9,7 @@ import com.example.core.assets.AssetBinaryManager
 import com.example.core.assets.ExtractedBinary
 import com.example.core.docs.GeneratedPdfDocResult
 import com.example.core.docs.RomForgePdfManualGenerator
+import com.example.core.gastro.AiPortingBlueprint
 import com.example.core.gastro.GastroAiScanReport
 import com.example.core.gastro.GastroCreationMakeImgResult
 import com.example.core.gastro.GastroCreationMakeRomZipResult
@@ -17,6 +18,10 @@ import com.example.core.gastro.GastroEngine
 import com.example.core.gastro.GastroJniBlobAndLibraryReport
 import com.example.core.gastro.GastroPorterPlanReport
 import com.example.core.gastro.GastroSubsystemDescriptor
+import com.example.core.gastro.GeminiOsArchitectAgent
+import com.example.core.gastro.PreBootSimulationReport
+import com.example.core.img.AospDecompilationReport
+import com.example.core.img.AospSourceDecompilerEngine
 import com.example.core.recore.RecoreEngine
 import com.example.core.recore.RecoreFullBrainReport
 import com.example.core.shell.ExecutionMode
@@ -161,6 +166,11 @@ data class KitchenUiState(
     val lastMakeRomZipResult: GastroCreationMakeRomZipResult? = null,
     val isCompileTimeAiKeyEmbedded: Boolean = false,
     val embeddedAiKeyStatusText: String = "",
+    // Omega-Forge AI & AOSP Source-Level Decompiler state
+    val activeRootProviderLabel: String = "Userspace + Direct Sysfs Reader",
+    val aospDecompilationReport: AospDecompilationReport? = null,
+    val aiPortingBlueprint: AiPortingBlueprint? = null,
+    val preBootSimulationReport: PreBootSimulationReport? = null,
     // Cross-Verifier summary
     val verificationSummary: CrossVerificationSummary? = null,
     // Console saved path
@@ -2078,11 +2088,30 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
             repository.clearAlerts()
             summary.alerts.forEach { repository.addAlert(it) }
 
+            val aospSourceBaseDir = File(storageManager.getRomForgePublicRoot(), "AOSP_SOURCE_TREE").apply { mkdirs() }
+            val decomp = AospSourceDecompilerEngine.decompileUnpackedImgToAospSourceTree(
+                unpackedImgDir = gsiDir,
+                aospSourceRootBaseDir = aospSourceBaseDir,
+                onLog = { appendLog(it) }
+            )
+            val blueprint = GeminiOsArchitectAgent.synthesizeExecutablePortingBlueprint(
+                unpackedImgDir = gsiDir,
+                decompilationSummary = "Format=${decomp.universalFormatInfo.detectedFormat}, Java=${decomp.totalJavaClassesDecompiled}, C++=${decomp.totalElf64BinariesDecompiledToCpp}",
+                deviceDnaSummary = "ExtractFiles=${gastroEngine.countExtractedFiles()}",
+                missingSymbolsAndLibs = decomp.missingSymbolsForPorting,
+                onLog = { appendLog(it) }
+            )
+            val preBoot = GeminiOsArchitectAgent.applyBlueprintAndRunClosedLoopPreBootVerification(
+                unpackedImgDir = gsiDir,
+                blueprint = blueprint,
+                onLog = { msg -> appendLog(msg) }
+            )
+
             recordActionCompleted(
                 moduleLabel = "CREATION • Make IMG",
-                actionTitle = "Make IMG (Reconstruction OS Source-Built via GASTROengine)",
+                actionTitle = "Make IMG (Reconstruction OS Source-Built via GASTROengine + IA)",
                 targetName = gsiDir.name,
-                summaryDetail = "${File(pubImgPath).name} (${makeImgResult.sizeBytes / 1024} KB) | Z3=${makeImgResult.recoreSmtStatus} (${makeImgResult.recoreBootConfidence}/100)"
+                summaryDetail = "${File(pubImgPath).name} (${makeImgResult.sizeBytes / 1024} KB) | Boot=${preBoot.overallBootableScore}% | Z3=${makeImgResult.recoreSmtStatus}"
             )
 
             _uiState.update {
@@ -2092,10 +2121,115 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                     activeTaskProgress = 1f,
                     lastMakeImgResult = makeImgResult.copy(outputImgPath = pubImgPath),
                     recoreBrainReport = recoreReport,
+                    aospDecompilationReport = decomp,
+                    aiPortingBlueprint = blueprint,
+                    preBootSimulationReport = preBoot,
                     gastroSubsystems = gastroEngine.getTenRustSubsystemsStatus(),
                     isExtractReady = gastroEngine.isExtractFolderPopulated(),
                     extractedFilesCount = gastroEngine.countExtractedFiles(),
                     verificationSummary = summary
+                )
+            }
+        }
+    }
+
+    /**
+     * Explicit Multi-Vector Root Probe & Acquisition (`Magisk`, `KernelSU`, `APatch`, `su`)
+     */
+    fun acquireRootAccessExplicitly() {
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(
+                    isBusy = true,
+                    activeTaskTitle = "Sonde Root Multi-Vecteurs (Magisk, KernelSU, APatch, /system/bin/su)..."
+                )
+            }
+            val acquired = shellEngine.acquireRootMultiVector { appendLog(it) }
+            val mode = if (acquired) ExecutionMode.ROOT_LOOPBACK else ExecutionMode.NON_ROOT_USERSPACE
+            _uiState.update {
+                it.copy(
+                    isBusy = false,
+                    activeTaskTitle = "",
+                    isRootAvailable = acquired,
+                    executionMode = mode,
+                    activeRootProviderLabel = shellEngine.activeRootProvider
+                )
+            }
+            recordActionCompleted(
+                moduleLabel = "EXTRACTOR • ROOT",
+                actionTitle = "Acquisition Root Multi-Vecteurs (${shellEngine.activeRootProvider})",
+                targetName = android.os.Build.DEVICE,
+                summaryDetail = if (acquired) "Session su uid=0 active (${shellEngine.activeSuBinaryPath})" else "Mode Hybride Userspace + Direct Sysfs"
+            )
+        }
+    }
+
+    /**
+     * Disassembles the selected unpacked `.img` / GSI into an AOSP Source Tree (`.java`, `.cpp`, `.h`, `.hal`, `.aidl`, `Android.bp`, `XML`),
+     * runs `GeminiOsArchitectAgent` to synthesize and apply the porting blueprint, and validates all 5 Pre-Boot stages.
+     */
+    fun runAospSourceDecompilationAndAiAutoPort() {
+        viewModelScope.launch {
+            val state = _uiState.value
+            val gsiDir = File(state.selectedDecompiledImgFullPath)
+            _uiState.update {
+                it.copy(
+                    isBusy = true,
+                    activeTaskTitle = "Désassemblage Code Source AOSP (.java, .cpp, .hal, Android.bp) & Auto-Portage IA...",
+                    activeTaskProgress = 0.20f
+                )
+            }
+            val aospSourceBaseDir = File(storageManager.getRomForgePublicRoot(), "AOSP_SOURCE_TREE").apply { mkdirs() }
+            val decomp = AospSourceDecompilerEngine.decompileUnpackedImgToAospSourceTree(
+                unpackedImgDir = gsiDir,
+                aospSourceRootBaseDir = aospSourceBaseDir,
+                onProgress = { p, msg ->
+                    _uiState.update { it.copy(activeTaskProgress = p * 0.5f, activeTaskTitle = msg) }
+                },
+                onLog = { appendLog(it) }
+            )
+
+            _uiState.update {
+                it.copy(
+                    activeTaskProgress = 0.65f,
+                    activeTaskTitle = "GeminiOsArchitectAgent : Synthèse & Injection du Blueprint Matériel IA..."
+                )
+            }
+            val blueprint = GeminiOsArchitectAgent.synthesizeExecutablePortingBlueprint(
+                unpackedImgDir = gsiDir,
+                decompilationSummary = "Format=${decomp.universalFormatInfo.detectedFormat}, Java=${decomp.totalJavaClassesDecompiled}, C++=${decomp.totalElf64BinariesDecompiledToCpp}, HAL/AIDL=${decomp.totalHalAidlContractsReconstructed}",
+                deviceDnaSummary = "Device=${android.os.Build.BRAND} ${android.os.Build.DEVICE} (${android.os.Build.BOARD}), ExtractFiles=${gastroEngine.countExtractedFiles()}",
+                missingSymbolsAndLibs = decomp.missingSymbolsForPorting,
+                onLog = { appendLog(it) }
+            )
+
+            _uiState.update {
+                it.copy(
+                    activeTaskProgress = 0.85f,
+                    activeTaskTitle = "Simulateur Pré-Boot (5 Stades) : Vérification & Auto-Guérison en boucle fermée..."
+                )
+            }
+            val preBoot = GeminiOsArchitectAgent.applyBlueprintAndRunClosedLoopPreBootVerification(
+                unpackedImgDir = gsiDir,
+                blueprint = blueprint,
+                onLog = { msg -> appendLog(msg) }
+            )
+
+            recordActionCompleted(
+                moduleLabel = "CREATION • AI ARCHITECT",
+                actionTitle = "Désassemblage Code Source AOSP & Auto-Portage IA (${blueprint.modelUsed})",
+                targetName = gsiDir.name,
+                summaryDetail = "${decomp.decompiledFiles.size} fichiers AOSP (.java/.cpp/.hal/.bp) | Boot=${preBoot.overallBootableScore}/100 (5/5 stades)"
+            )
+
+            _uiState.update {
+                it.copy(
+                    isBusy = false,
+                    activeTaskTitle = "",
+                    activeTaskProgress = 1f,
+                    aospDecompilationReport = decomp,
+                    aiPortingBlueprint = blueprint,
+                    preBootSimulationReport = preBoot
                 )
             }
         }

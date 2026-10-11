@@ -53,6 +53,7 @@ import com.example.ui.KitchenUiState
 fun ExtractorScreen(
     uiState: KitchenUiState,
     onExecuteExtractMe: (Boolean) -> Unit,
+    onAcquireRootAccess: () -> Unit = {},
     onRunJniRustBlobManager: () -> Unit = {},
     onPatchBlobOrGenerateShim: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onNavigateToPorter: () -> Unit,
@@ -94,12 +95,12 @@ fun ExtractorScreen(
                     Spacer(modifier = Modifier.width(10.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "EXTRACTOR • Extraction ADN du Téléphone (-> EXTRACT/)",
+                            text = "EXTRACTOR • Extraction Root & Device Tree (-> EXTRACT/)",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = "Propulsé par GASTROengine (DeviceProfiler + ShellOrchestrator + FileExtractor + FsParser)",
+                            text = "Propulsé par GASTROengine (Root Multi-Su + Device Tree AOSP + Blobs Bruts .so)",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.primary
                         )
@@ -107,7 +108,7 @@ fun ExtractorScreen(
                 }
 
                 Text(
-                    text = "Ce module extrait tous les éléments de référence de votre téléphone (partitions, points de montage, services init, manifestes VINTF, HALs, blobs .so, keylayouts, permissions et symlinks) et les isole proprement dans le dossier ROM_FORGE/EXTRACT/.",
+                    text = "Ce module sonde l'accès Root multi-chemins (Magisk, KernelSU, APatch, /system/bin/su), extrait le Device Tree complet de votre téléphone ainsi que les partitions et binaires bruts (.so, HALs) nécessaires au portage 100% fonctionnel.",
                     style = MaterialTheme.typography.bodySmall
                 )
 
@@ -128,7 +129,7 @@ fun ExtractorScreen(
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = "Sécurité ShellOrchestrator : Lecture seule sur le système du téléphone. 100% des manipulations sont isolées dans l'espace de travail GASTRO (${uiState.romForgePublicPath}/EXTRACT/).",
+                            text = "Fournisseur Root Actif : ${uiState.activeRootProviderLabel} | Sortie isolée : ${uiState.romForgePublicPath}/EXTRACT/",
                             style = MaterialTheme.typography.labelSmall,
                             color = Color(0xFFB9F6CA),
                             fontFamily = FontFamily.Monospace
@@ -138,7 +139,7 @@ fun ExtractorScreen(
             }
         }
 
-        // 2. Main Action Card: ExtractMe Button -> ROM_FORGE/EXTRACT/
+        // 2. Main Action Card: Root Acquisition + ExtractMe Button -> ROM_FORGE/EXTRACT/
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
             modifier = Modifier.fillMaxWidth()
@@ -147,6 +148,25 @@ fun ExtractorScreen(
                 modifier = Modifier.padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                OutlinedButton(
+                    onClick = onAcquireRootAccess,
+                    enabled = !uiState.isBusy,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("btn_extractor_acquire_root")
+                ) {
+                    Icon(imageVector = Icons.Default.Terminal, contentDescription = "Root")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (uiState.isRootAvailable) {
+                            "✓ Accès Root Actif (${uiState.activeRootProviderLabel}) • Re-tester"
+                        } else {
+                            "Activer l'Accès Root Multi-Chemins (Magisk / KernelSU / APatch / su)"
+                        },
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -159,7 +179,7 @@ fun ExtractorScreen(
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Combine l'extraction réelle du téléphone avec les définitions FOD/HBM/VINTF de référence pour garantir 100% de complétude même sans Root.",
+                            text = "Combine l'extraction réelle du téléphone avec les définitions FOD/HBM/VINTF de référence pour garantir 100% de complétude.",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -183,7 +203,7 @@ fun ExtractorScreen(
                     Icon(imageVector = Icons.Default.Download, contentDescription = "ExtractMe")
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "ExtractMe (Extraire Téléphone -> Dossier EXTRACT/)",
+                        text = "ExtractMe (Dump Device Tree + Partitions + Binaires Bruts -> EXTRACT/)",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold
                     )
