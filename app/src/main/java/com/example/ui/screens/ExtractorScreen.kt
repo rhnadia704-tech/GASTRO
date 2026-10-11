@@ -52,11 +52,13 @@ import com.example.ui.KitchenUiState
 fun ExtractorScreen(
     uiState: KitchenUiState,
     onExecuteExtractMe: (Boolean) -> Unit,
+    onRunJniRustBlobManager: () -> Unit = {},
     onNavigateToPorter: () -> Unit,
     onNavigateToCreation: () -> Unit
 ) {
     var combineWithTucanaBase by remember { mutableStateOf(true) }
     val dna = uiState.gastroDnaProfile
+    val jniReport = uiState.gastroJniBlobReport
 
     Column(
         modifier = Modifier
@@ -304,7 +306,106 @@ fun ExtractorScreen(
             }
         }
 
-        // 4. Overview of the 10 Rust Modules of GASTROengine
+        // 4. JNI-Based Rust Module Card: gastro_engine_jni (Low-Level Library & Blob Management)
+        Card(
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        imageVector = Icons.Default.Terminal,
+                        contentDescription = "JNI Rust Module",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "Module JNI Rust • Gestion Bas-Niveau Librairies (.so) & Blobs",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Crate : app/src/main/rust/gastro_engine_jni • libgastro_engine_jni.so",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Text(
+                    text = "Pont JNI C-ABI (GastroJniRustBlobBridge) dédié à l'inspection binaire ELF64 (e_machine, PT_DYNAMIC, DT_NEEDED, SONAME), au patch binaire in-place des slots SONAME, à la génération de shims AArch64 (libshim_gastro_*.so) et à la réconciliation des blobs propriétaires entre EXTRACT/ et UNPACK/${uiState.selectedDecompiledImgName}.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                Button(
+                    onClick = onRunJniRustBlobManager,
+                    enabled = !uiState.isBusy,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(52.dp)
+                        .testTag("btn_extractor_jni_rust_blob_manager")
+                ) {
+                    Icon(imageVector = Icons.Default.Memory, contentDescription = "JNI Rust Blob Manager")
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "Exécuter JNI Rust Blob & Library Manager (${uiState.selectedDecompiledImgName})",
+                        style = MaterialTheme.typography.labelLarge,
+                        fontWeight = FontWeight.ExtraBold
+                    )
+                }
+
+                if (jniReport != null) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.surface,
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(10.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "État Pont JNI : ${jniReport.jniBridgeMode}",
+                                style = MaterialTheme.typography.labelMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = "• Librairies ELF64 inspectées : ${jniReport.totalElfLibrariesScanned}\n" +
+                                    "• Blobs propriétaires gérés : ${jniReport.blobsTransplantedOrVerifiedCount}/${jniReport.totalProprietaryBlobsManaged}\n" +
+                                    "• Dépendances DT_NEEDED résolues : ${jniReport.missingDtNeededResolvedCount} | Shims ELF64 AArch64 : ${jniReport.generatedElf64ShimsCount}\n" +
+                                    "• Statut VNDK : ${jniReport.vndkNamespaceStatus}",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            HorizontalDivider()
+                            Text(
+                                text = "Blobs Propriétaires Gérés par gastro_engine_jni :",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            jniReport.managedBlobs.forEach { blob ->
+                                Text(
+                                    text = "  • [${blob.category}] ${blob.blobName} (${blob.sizeBytes} B • SHA256=${blob.sha256Hex}) -> ${blob.actionApplied}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // 5. Overview of the 11 Rust Modules of GASTROengine
         Card(
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
             modifier = Modifier.fillMaxWidth()
@@ -321,7 +422,7 @@ fun ExtractorScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Architecture Modulaire GASTROengine (10 Composants Rust + R.E.C.O.R.E)",
+                        text = "Architecture Modulaire GASTROengine (11 Composants Rust & JNI + R.E.C.O.R.E)",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold
                     )

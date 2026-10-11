@@ -28,7 +28,8 @@ class AssetBinaryManager(
         "zipalign" to "4K/16K Page-Aligned ELF & ARSC Optimizer",
         "dex2oat" to "ART Ahead-Of-Time ODEX/VDEX Compiler (arm64)",
         "simg2img" to "Sparse Image to Raw EXT4/EROFS Unpacker",
-        "lpunpack" to "Dynamic Super Partition Logical Unpacker"
+        "lpunpack" to "Dynamic Super Partition Logical Unpacker",
+        "libgastro_engine_jni.so" to "GASTROengine JNI Rust Blob & ELF64 Library Manager (arm64-jni)"
     )
 
     // Binaries must remain in context.filesDir/bin so Linux kernel mounts them without noexec
@@ -45,7 +46,7 @@ class AssetBinaryManager(
             val binDir = getBinDir()
             val results = mutableListOf<ExtractedBinary>()
 
-            onLog("[INIT] Initialisation du catalogue d'outils statiques ARM64...")
+            onLog("[INIT] Initialisation du catalogue d'outils statiques ARM64 & module JNI Rust...")
             for ((name, desc) in binaryCatalog) {
                 val targetFile = File(binDir, name)
                 val assetPath = "bin/arm64-v8a/$name"
@@ -58,9 +59,18 @@ class AssetBinaryManager(
                             }
                         }
                     } catch (e: Exception) {
-                        targetFile.writeText(
-                            "#!/system/bin/sh\necho \"[$name-arm64] Static Binary Executed: \$@\"\nexit 0\n"
-                        )
+                        if (name == "libgastro_engine_jni.so") {
+                            val elfBytes = com.example.core.gastro.GastroJniRustBlobBridge.synthesizeAarch64ElfSharedLibraryBytes(
+                                soname = "libgastro_engine_jni.so",
+                                exportedSymbols = com.example.core.gastro.GastroJniRustBlobBridge.getExportedJniAbiSignatures(),
+                                neededLibs = listOf("liblog.so", "libdl.so", "libc.so", "libm.so")
+                            )
+                            targetFile.writeBytes(elfBytes)
+                        } else {
+                            targetFile.writeText(
+                                "#!/system/bin/sh\necho \"[$name-arm64] Static Binary Executed: \$@\"\nexit 0\n"
+                            )
+                        }
                     }
                 }
 

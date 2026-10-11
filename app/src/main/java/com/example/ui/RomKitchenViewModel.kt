@@ -14,6 +14,7 @@ import com.example.core.gastro.GastroCreationMakeImgResult
 import com.example.core.gastro.GastroCreationMakeRomZipResult
 import com.example.core.gastro.GastroDeviceDnaProfile
 import com.example.core.gastro.GastroEngine
+import com.example.core.gastro.GastroJniBlobAndLibraryReport
 import com.example.core.gastro.GastroPorterPlanReport
 import com.example.core.gastro.GastroSubsystemDescriptor
 import com.example.core.recore.RecoreEngine
@@ -155,6 +156,7 @@ data class KitchenUiState(
     val gastroDnaProfile: GastroDeviceDnaProfile? = null,
     val gastroPorterPlanReport: GastroPorterPlanReport? = null,
     val gastroAiScanReport: GastroAiScanReport? = null,
+    val gastroJniBlobReport: GastroJniBlobAndLibraryReport? = null,
     val lastMakeImgResult: GastroCreationMakeImgResult? = null,
     val lastMakeRomZipResult: GastroCreationMakeRomZipResult? = null,
     val isCompileTimeAiKeyEmbedded: Boolean = false,
@@ -302,6 +304,11 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                 onLog = { appendLog(it) }
             )
             val porterPlanInit = gastroEngine.buildPorterPlanAndAlignStructure(activeDir) { appendLog(it) }
+            val jniBlobInit = gastroEngine.runJniRustBlobAndLibraryManager(
+                unpackedGsiDir = activeDir,
+                autoReconcileAndShim = false,
+                onLog = { appendLog(it) }
+            )
 
             _uiState.update {
                 it.copy(
@@ -325,6 +332,7 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                     isExtractReady = gastroEngine.isExtractFolderPopulated(),
                     extractedFilesCount = gastroEngine.countExtractedFiles(),
                     gastroPorterPlanReport = porterPlanInit,
+                    gastroJniBlobReport = jniBlobInit,
                     isCompileTimeAiKeyEmbedded = gastroEngine.isCompileTimeGeminiKeyEmbedded(),
                     embeddedAiKeyStatusText = gastroEngine.getEmbeddedAiKeyStatusSummary(),
                     verificationSummary = verifierSummary
@@ -1816,14 +1824,19 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                 )
             }
             val planReport = gastroEngine.buildPorterPlanAndAlignStructure(gsiDir) { appendLog(it) }
+            val jniBlobReport = gastroEngine.runJniRustBlobAndLibraryManager(
+                unpackedGsiDir = gsiDir,
+                autoReconcileAndShim = true,
+                onLog = { appendLog(it) }
+            )
             val mechReport = autoPorterEngine.inspectGsiMechanismAndVendorCommunication(gsiDir) { appendLog(it) }
             val currentPort = _uiState.value.portAnalysisResult ?: autoPorterEngine.analyzeStockAndGsiTrees(gsiDir) { appendLog(it) }
 
             recordActionCompleted(
                 moduleLabel = "PORTER • PORTERPLAN",
-                actionTitle = "Architecture & Plan de Portage (GSI <-> Téléphone)",
+                actionTitle = "Architecture & Plan de Portage (GSI <-> Téléphone + JNI Rust Blobs)",
                 targetName = gsiDir.name,
-                summaryDetail = "${planReport.architectureComparisons.size} sous-systèmes comparés | StructureAligner & VintfReconciler actifs"
+                summaryDetail = "${planReport.architectureComparisons.size} sous-systèmes comparés | ${jniBlobReport.totalElfLibrariesScanned} libs ELF64 & ${jniBlobReport.totalProprietaryBlobsManaged} blobs gérés"
             )
 
             _uiState.update {
@@ -1832,10 +1845,46 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                     activeTaskTitle = "",
                     activeTaskProgress = 1f,
                     gastroPorterPlanReport = planReport,
+                    gastroJniBlobReport = jniBlobReport,
                     gastroSubsystems = gastroEngine.getTenRustSubsystemsStatus(),
                     isExtractReady = gastroEngine.isExtractFolderPopulated(),
                     extractedFilesCount = gastroEngine.countExtractedFiles(),
                     portAnalysisResult = currentPort.copy(gsiMechanismReport = mechReport)
+                )
+            }
+        }
+    }
+
+    fun executeGastroJniBlobAndLibraryManager() {
+        viewModelScope.launch {
+            val gsiDir = File(_uiState.value.selectedDecompiledImgFullPath)
+            _uiState.update {
+                it.copy(
+                    isBusy = true,
+                    activeTaskTitle = "GASTROengine JNI Rust (libgastro_engine_jni.so) : Gestion bas-niveau des librairies ELF64 (.so) & blobs propriétaires...",
+                    activeTaskProgress = 0.45f
+                )
+            }
+            val jniReport = gastroEngine.runJniRustBlobAndLibraryManager(
+                unpackedGsiDir = gsiDir,
+                autoReconcileAndShim = true,
+                onLog = { appendLog(it) }
+            )
+
+            recordActionCompleted(
+                moduleLabel = "GASTROengine • JNI Rust",
+                actionTitle = "Gestion Bas-Niveau Librairies ELF64 (.so) & Blobs (gastro_engine_jni)",
+                targetName = gsiDir.name,
+                summaryDetail = "${jniReport.totalElfLibrariesScanned} libs ELF64 inspectées | ${jniReport.blobsTransplantedOrVerifiedCount}/${jniReport.totalProprietaryBlobsManaged} blobs | ${jniReport.generatedElf64ShimsCount} shims AArch64"
+            )
+
+            _uiState.update {
+                it.copy(
+                    isBusy = false,
+                    activeTaskTitle = "",
+                    activeTaskProgress = 1f,
+                    gastroJniBlobReport = jniReport,
+                    gastroSubsystems = gastroEngine.getTenRustSubsystemsStatus()
                 )
             }
         }

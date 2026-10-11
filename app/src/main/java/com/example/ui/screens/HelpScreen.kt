@@ -183,19 +183,46 @@ fun HelpScreen(
             targetTab = KitchenTab.COMPILER
         ),
         HelpGuideSection(
-            title = "6. Porting (GSI) — Analyse HAL Vendor & FOD Fixer",
-            subtitle = "Détecteur Mécanisme GSI <-> Vendor, Scan FODstruct & Fix Stock ROM",
+            title = "6. EXTRACTOR — Extraction ADN du Téléphone (-> EXTRACT/)",
+            subtitle = "ExtractMe propulsé par GASTROengine (DeviceProfiler + ShellOrchestrator)",
+            icon = Icons.Default.Download,
+            steps = listOf(
+                "• Cliquez sur « ExtractMe (Extraire Téléphone -> Dossier EXTRACT/) » pour extraire en lecture seule l'ADN matériel et logiciel de votre téléphone.",
+                "• Isole les partitions, points de montage, services init, symlinks SAR, VINTF et la logique FOD double (/system et /vendor) dans ROM_FORGE/EXTRACT/.",
+                "• Déverrouille automatiquement le bouton PORT dans le module PORTER."
+            ),
+            commands = listOf(
+                "ls" to "Vérifier l'espace de travail GASTRO"
+            ),
+            targetTab = KitchenTab.EXTRACTOR
+        ),
+        HelpGuideSection(
+            title = "7. PORTER — PORT, PORTERPLAN & FOD (SCAN, AISCAN, Fix 1/2/3)",
+            subtitle = "Portage GSI complet & Sonde FOD Dynamique (/system + /vendor)",
             icon = Icons.Default.AccountTree,
             steps = listOf(
-                "• Bouton « Détecter Contenu & Mécanisme GSI » : Analyse les canaux Binder/HwBinder/VINTF et explique ce qui différencie le GSI de la ROM Stock du Vendor.",
-                "• Bouton « Scan FODstruct » : Inspecte les 5 couches FOD du GSI, diagnostique pourquoi le FOD échoue sur le Vendor et génère un plan d'action.",
-                "• Bouton « Fixer FOD (Stock) » : Implémente le fix cohérent sur les 5 couches (Overlays RRO 445x1910 + #00FFAA, IXiaomiFingerprint/Goodix, HBM 0x20000 et SELinux CIL) comme sur une ROM Stock."
+                "• Bouton « PORT » : Crée le portage complet vers l'OS unpacké sélectionné à partir du dossier EXTRACT/.",
+                "• Bouton « PORTERPLAN » : Ouvre la page dédiée comparant l'architecture du GSI et celle du téléphone (pourquoi ça marche sur la ROM hôte et pourquoi ça échoue sur le GSI).",
+                "• Bouton « FOD » : Ouvre la page dédiée FOD avec SCAN (/system + /vendor), AISCAN (IA Gemini + Anti-Quota + GASTROengine) et les 3 correctifs : FOD fix 1 (Stock-Grade), FOD fix 2 (Bidouillage sans modif APK) et FOD fix 3 (Assisté par IA + GASTROengine + R.E.C.O.R.E)."
             ),
             commands = listOf(
                 "getprop" to "Inspecter les propriétés matérielles de votre téléphone",
                 "ls port" to "Vérifier les dossiers et images .img portés dans ROM_FORGE/PORT"
             ),
             targetTab = KitchenTab.AUTO_PORTER
+        ),
+        HelpGuideSection(
+            title = "8. CREATION — Le Graal MAKE IMG & MAKE ROM (De A à Z)",
+            subtitle = "Reconstruction d'OS en 12 étapes (Tous moteurs + IA + R.E.C.O.R.E)",
+            icon = Icons.Default.Bolt,
+            steps = listOf(
+                "• Bouton « MAKE IMG » : Reconstruit un OS .img complet de A à Z en enchaînant automatiquement les 12 étapes (EXTRACTOR -> StructureAligner -> IA Gemini -> PORTER -> FOD Fix 3 -> VintfReconciler -> KeyMaker -> SignPro -> Generator -> FsParser -> R.E.C.O.R.E 16 rapports + Z3 -> CrossVerifier).",
+                "• Bouton « MAKE ROM » : Exécute les 12 étapes puis assemble une Custom ROM complète en archive .ZIP flashable (dynamic_partitions_op_list, updater-script, system.img, vbmeta.img, ADN EXTRACT)."
+            ),
+            commands = listOf(
+                "recore --smt-z3" to "Vérifier la preuve formelle Z3 SMT et les 16 rapports SCANNER"
+            ),
+            targetTab = KitchenTab.CREATION
         )
     )
 
@@ -204,27 +231,22 @@ fun HelpScreen(
         "Règle 2 • Cohérence SELinux & MAC : Après une resignature d'APK système, le certificat hexadécimal X.509 complet DOIT être mis à jour dans etc/selinux/plat_mac_permissions.xml sous peine de rejet par PackageManagerService au boot.",
         "Règle 3 • Permissions Critiques Init : Le binaire /system/bin/init doit obligatoirement avoir l'UID 0, GID 2000 et le mode octal 0750 avec le contexte u:object_r:init_exec:s0 dans config/system_fs_config et system_file_contexts.",
         "Règle 4 • Exclusion des Métadonnées UKA au Repack : Les dossiers de travail config/ et ROM_FORGE_META/ servent à alimenter e2fsdroid / mkfs.erofs mais ne doivent jamais être injectés comme des fichiers APKs à l'intérieur de la racine EXT4.",
-        "Règle 5 • Architecture FOD Optique (SM6150 / Goodix) : Le FOD nécessite simultanément les coordonnées géométriques RRO (445, 1910), le nœud sysfs HBM (0x20000 sur disp_param) et l'interface HIDL IXiaomiFingerprint@1.0."
+        "Règle 5 • Sonde FOD Double Partition (/system + /vendor) : Le FOD nécessite l'alignement simultané de la logique /system (keylayout dynamique, keycode 338/304, coordonnées RRO) et de la logique /vendor (nœud sysfs HBM, DimLayer, Touch et HAL biométrique)."
     )
 
     val changelogFeatures = listOf(
+        "v4.0 — GASTROengine (10 Modules Rust), EXTRACTOR, PORTER (FOD 1/2/3) & CREATION (MAKE A-à-Z)" to listOf(
+            "Nouveau module EXTRACTOR avec bouton ExtractMe isolant tout l'ADN du téléphone (/system + /vendor) dans ROM_FORGE/EXTRACT/ via ShellOrchestrator.",
+            "Refonte complète de PORTER avec liste déroulante UNPACK, bouton PORT, page dédiée PORTERPLAN et page dédiée FOD (SCAN, AISCAN avec IA Gemini + Anti-Quota, FOD fix 1, FOD fix 2, FOD fix 3).",
+            "Sonde dynamique HostSystemAndVendorFodProbe inspectant à la fois /system et /vendor du téléphone pour un fix FOD sur-mesure non-statique.",
+            "Nouveau module CREATION (Le Graal) : boutons MAKE IMG et MAKE ROM reconstruisant un OS .img ou une Custom ROM .zip flashable de A à Z en 12 étapes unifiant tous les moteurs et R.E.C.O.R.E (SCANNER 16 rapports + COMPARE + Z3 SMT)."
+        ),
         "v3.0 — Reconstruction Complète de l'Interface & Thème Dynamique" to listOf(
-            "Barre latérale unifiée à 5 modules d'ingénierie : Key Maker, Sign Pro, Generator, Compilator (Unpack/Repack), Porting (GSI).",
-            "Barre de navigation inférieure à 3 volets : Action (module actif), Console (log entier, historique, progression et terminal), Paramètres (thème, aides, règles, changelog).",
+            "Barre latérale unifiée et barre de navigation inférieure à 3 volets : Action (module actif), Console (log entier, historique, progression et terminal), Paramètres (thème, PDF technique, aides, règles, changelog).",
             "Support complet du Thème Système (Auto), Mode Clair et Mode Sombre."
         ),
-        "v2.9 — Porting GSI Avancé & FODstruct Fixer (Qualité Stock ROM)" to listOf(
-            "Nouveau détecteur de contenu et mécanisme GSI <-> Vendor : analyse IPC Binder/HwBinder, VINTF et compare chaque HAL déclaré avec la ROM Stock.",
-            "Nouveau moteur « Scan FODstruct » : audit des 5 couches FOD du GSI, diagnostic des blocages Vendor et génération automatique d'un plan d'action.",
-            "Nouveau bouton « Fixer FOD (Stock) » : injection cohérente des 5 couches FOD (SystemUIUdfpsTucanaOverlay, TrebleHardwareOverlay 445x1910, IXiaomiFingerprint/Goodix, HBM 0x20000, SELinux CIL)."
-        ),
-        "v2.8 — Unpacker & Repacker UKA (EXT4 / EROFS / ZArchiver)" to listOf(
-            "Moteur inspiré de blackeangel/UKA avec génération et synchronisation de config/<partition>_fs_config et config/<partition>_file_contexts.",
-            "Constructeur EXT4 multi-groupes conforme e2fsck / 7-Zip / ZArchiver et support complet EROFS v1 (0xE0F5E1E2)."
-        ),
-        "v2.7 — Inspecteur de Signature APK Complet & Zéro Bootloop" to listOf(
-            "Affichage de la clé entière de chaque APK (Certificat X.509 PEM intégral, Modulus RSA-2048 hexadécimal complet, SHA-256, SHA-1, MD5, permissions).",
-            "Vérificateur croisé AOSP dédié à l'IMG décompilé sélectionné avec défilement fluide et harmonisation XML anti-bootloop en 1 clic."
+        "v2.8 — Unpacker & Repacker UKA 1:1 (EXT4 / EROFS / DSU Sideloader)" to listOf(
+            "Moteur inspiré de blackeangel/UKA avec Repack Simple & Intelligent 1:1 (clonage bit-à-bit ou greffe chirurgicale Copy-On-Write ExactImageCloneEngine)."
         )
     )
 

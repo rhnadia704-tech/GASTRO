@@ -366,8 +366,31 @@ class GastroEngine(
             status = "ACTIF (SAR / /system_ext / /product / /vendor)",
             description = "Réorganise l'arborescence du GSI unpacké pour correspondre exactement à la structure de symlinks du téléphone.",
             telemetryMetric = "Alignement canonique System-As-Root"
+        ),
+        GastroSubsystemDescriptor(
+            id = 11,
+            rustModuleName = "gastro_jni::BlobAndLibManager (libgastro_engine_jni.so)",
+            title = "11. Module JNI Rust • Gestion Bas-Niveau Librairies (.so) & Blobs",
+            status = "ACTIF (${GastroJniRustBlobBridge.getJniBridgeStatusSummary()})",
+            description = "Intégration JNI Rust (app/src/main/rust/gastro_engine_jni) pour l'analyse ELF64, la résolution transitive DT_NEEDED, le patch binaire SONAME et la gestion des blobs propriétaires.",
+            telemetryMetric = "5 fonctions JNI C-ABI • ELF64 AArch64 + Shims"
         )
     )
+
+    suspend fun runJniRustBlobAndLibraryManager(
+        unpackedGsiDir: File,
+        autoReconcileAndShim: Boolean = true,
+        onLog: (String) -> Unit
+    ): GastroJniBlobAndLibraryReport = withContext(Dispatchers.IO) {
+        val stockVendorRefDir = File(autoPorterEngine.getPortRootDir(), "stock_vendor_ref").apply { mkdirs() }
+        GastroJniRustBlobBridge.executeLowLevelBlobAndLibraryManagement(
+            unpackedGsiDir = unpackedGsiDir,
+            extractRootDir = extractRootDir.apply { mkdirs() },
+            stockVendorRefDir = stockVendorRefDir,
+            autoReconcileAndShim = autoReconcileAndShim,
+            onLog = onLog
+        )
+    }
 
     fun isExtractFolderPopulated(): Boolean {
         val marker = File(extractRootDir, "device_dna_profile.json")
@@ -1039,14 +1062,19 @@ class GastroEngine(
             detail = "init.tucana.fod.rc + uinput-goodix.kl + SystemUI/Framework UDFPS Overlays (X=540, Y=1918, R=95, HBM 0x20000)"
         )
 
-        // STAGE 6: VintfReconciler & DependencyAnalyzer
-        onProgress(0.50f, "MAKE [6/12] VintfReconciler : Réconciliation HIDL/AIDL & dépendances ELF64 .so...")
+        // STAGE 6: VintfReconciler, DependencyAnalyzer & JNI Rust Blob/Library Manager (`gastro_engine_jni`)
+        onProgress(0.50f, "MAKE [6/12] JNI Rust Blob & Library Manager + VintfReconciler : Gestion bas-niveau .so ELF64 & blobs...")
+        val jniBlobReport = runJniRustBlobAndLibraryManager(
+            unpackedGsiDir = unpackedGsiDir,
+            autoReconcileAndShim = true,
+            onLog = onLog
+        )
         recordStage(
             step = 6,
-            moduleName = "VINTF & ABI",
-            rustSub = "gastro_abi::VintfReconciler_DependencyAnalyzer",
-            title = "Réconciliation VINTF & Graphe ELF64 DT_NEEDED",
-            detail = porterPlan.vintfReconcileSummary
+            moduleName = "JNI RUST BLOB & ABI",
+            rustSub = "gastro_jni::BlobAndLibManager + gastro_abi::VintfReconciler",
+            title = "Gestion Bas-Niveau Librairies ELF64 (.so), Blobs Propriétaires & VINTF",
+            detail = "${jniBlobReport.totalElfLibrariesScanned} libs ELF64 analysées | ${jniBlobReport.blobsTransplantedOrVerifiedCount}/${jniBlobReport.totalProprietaryBlobsManaged} blobs gérés | ${jniBlobReport.generatedElf64ShimsCount} shims AArch64 | ${porterPlan.vintfReconcileSummary}"
         )
 
         // STAGE 7: KeyMakerEngine (Cryptographic RSA-2048 Suite)

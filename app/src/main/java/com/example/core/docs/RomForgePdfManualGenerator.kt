@@ -260,21 +260,22 @@ object RomForgePdfManualGenerator {
 
         // Start Page 1: Cover & Document Header
         startNewPage()
-        canvas!!.drawText("ROM FORGE KITCHEN STUDIO — DOCUMENTATION TECHNIQUE COMPLÈTE", MARGIN_H, cursorY + 14f, titlePaint)
+        canvas!!.drawText("GASTRO (ROM FORGE STUDIO) — DOCUMENTATION TECHNIQUE COMPLÈTE", MARGIN_H, cursorY + 14f, titlePaint)
         cursorY += 22f
         canvas!!.drawText(
-            "Spécification Exhaustive des Fonctionnalités, Outils Internes, Manuel d'Utilisation, Arborescence & Audit IA (DSU / EXT4 / R.E.C.O.R.E)",
+            "Spécification Exhaustive : GASTROengine (10 Modules Rust), EXTRACTOR, PORTER, FOD 1/2/3, CREATION (Make IMG/ROM A-à-Z) & R.E.C.O.R.E",
             MARGIN_H,
             cursorY + 10f,
             subtitlePaint
         )
         cursorY += 18f
         drawParagraph(
-            "Ce document technique de référence détaille l'intégralité de l'architecture logicielle, des moteurs bas-niveau, " +
-                    "des algorithmes de manipulation d'images système Android (EXT4, EROFS, Sparse, payload.bin, super.img), " +
-                    "du moteur de clonage 1:1 et de greffe chirurgicale In-Place (ExactImageCloneEngine), des deux solutions FOD Fix " +
-                    "(Solution 1 & Solution 2 Sans Re-signature), de Sign PRO et du moteur déterministe R.E.C.O.R.E à 12 Piliers. " +
-                    "Il est conçu à la fois comme manuel d'utilisation complet et comme dossier d'audit technique pour revue par une IA externe."
+            "Ce document technique de référence détaille l'intégralité de l'architecture logicielle de GASTRO (ROM Forge Kitchen Studio), " +
+                    "ses 7 modules d'action en barre latérale (Key Maker, Sign Pro, Generator, Compilator, EXTRACTOR, PORTER, CREATION), " +
+                    "son cœur modulaire GASTROengine (10 composants Rust), son cerveau déterministe de fond R.E.C.O.R.E (SCANNER 16 rapports + COMPARE + Solveur Z3 SMT), " +
+                    "son moteur de clonage et greffe chirurgicale 1:1 (ExactImageCloneEngine), sa sonde dynamique double partition HostSystemAndVendorFodProbe (/system + /vendor) " +
+                    "et son pipeline Graal de reconstruction OS de A à Z (MAKE IMG & MAKE ROM en 12 étapes assistées par l'IA gratuite Gemini/AI Studio avec Anti-Quota). " +
+                    "Il sert à la fois de manuel d'utilisation complet et de dossier d'audit technique prêt à être partagé avec une autre IA."
         )
 
         // =========================================================================
@@ -282,87 +283,81 @@ object RomForgePdfManualGenerator {
         // =========================================================================
         drawSectionBanner("1", "DESCRIPTION EXHAUSTIVE DE CHAQUE FONCTIONNALITÉ DE L'APPLICATION")
 
-        drawSubHeader("1.1. Unpack Universel UKA v5.27 & Snapshot Immuable (Onglet 1 : Extract / Unpack)")
+        drawSubHeader("1.1. Compilator — Unpack Universel UKA v5.27 & Repack Simple & Intelligent 1:1 (UNPACK / PACKED)")
         drawBulletList(
             listOf(
-                "Formats supportés en entrée : payload.bin (OTA A/B Android 10–15), super.img (Dynamic Partitions LP Metadata Geometry), system.new.dat.br (Brotli + transfer.list), Sparse .img (magic 0xED26FF3A) et Raw EXT4 .img (magic 0xEF53 à l'offset 1024).",
-                "Conversion Sparse -> Raw (simg2img 64-bit) : Décodage exact des chunks CHUNK_TYPE_RAW (0xCAC1), CHUNK_TYPE_FILL (0xCAC2) et CHUNK_TYPE_DONT_CARE (0xCAC3) par transfert FileChannel zéro-copie.",
-                "Extraction Userspace EXT4 complète (Ext4UserspaceExtractor) : Parcours récursif depuis l'inode racine #2 (supportant les arbres d'extents depth 0..5, les répertoires indexés HTree, les liens symboliques inline <= 60 octets et externes > 60 octets, les permissions POSIX UID/GID/Mode et les attributs étendus xattr security.selinux & security.capability).",
-                "Capture du Snapshot Immuable de Base : Génère simultanément les tables officielles UKA v5.27 (config/system_fs_config, config/system_file_contexts, config/system_size.txt, config/system_space.txt, config/system_avb_footer.bin) ET le snapshot immuable ROM_FORGE_META/base_img_snapshot.txt + ROM_FORGE_META/exact_inode_extents_map.txt + ROM_FORGE_META/source_img_ref.txt."
+                "Unpack UKA v5.27 : Décompresse les images EXT4 (magic 0xEF53), Sparse-EXT4 (0xED26FF3A), EROFS (0xE0F5E1E2) et Sparse-EROFS dans ROM_FORGE/UNPACK/<nom_img>/ sans copie temporaire inutile (SAF Direct FileChannel).",
+                "Capture du Snapshot Immuable 1:1 : Génère simultanément les tables UKA (config/<part>_fs_config, config/<part>_file_contexts, <part>_size.txt, <part>_space.txt, <part>_avb_footer.bin) ET le snapshot immuable ROM_FORGE_META/base_img_snapshot.txt + exact_inode_extents_map.txt + base_source.img.",
+                "Repack Simple & Intelligent 1:1 (Compatible DSU Sideloader) : Si 0 fichier n'a été modifié, clone bit-à-bit l'image Raw de départ (100% identique à l'octet près). Si des fichiers ont été ajoutés ou modifiés, applique une greffe chirurgicale In-Place avec Copy-On-Write (CoW) sur le clone 1:1 via ExactImageCloneEngine sans jamais altérer les signatures APK ni corrompre les blocs partagés EXT4."
             )
         )
 
-        drawSubHeader("1.2. Repack Simple & Intelligent 1:1 (Bouton dédié & Pipeline DSU Sideloader)")
+        drawSubHeader("1.2. EXTRACTOR — Extraction Sécurisée de l'ADN du Téléphone (ExtractMe -> ROM_FORGE/EXTRACT/)")
         drawBulletList(
             listOf(
-                "Objectif : Garantir qu'une image .img décompressée puis recompressée sans modification ressorte à 100% bit-à-bit identique à l'image de départ, et qu'une image modifiée conserve 100% des structures EXT4 d'origine des fichiers non touchés.",
-                "Cas A — Zéro modification détectée (changedPaths=0, addedPaths=0, deletedPaths=0) : Clone / dé-sparse directement le flux binaire d'origine (source_img_ref.txt) 1:1 dans PACKED/system_repacked_1to1.img. Tous les blocs partagés (EXT4_FEATURE_RO_COMPAT_SHARED_BLOCKS 0x4000 générés par e2fsdroid -s), les index de répertoires HTree, les inodes 256 octets et le footer AVB 2.0 sont préservés à l'octet près.",
-                "Cas B — Modifications ciblées ou ajouts de fichiers (ex: FOD Fix Solution 2, R.E.C.O.R.E Auto-Heal) : Exécute une mutation chirurgicale In-Place avec Copy-On-Write (CoW) sur le clone 1:1 de l'image de base via ExactImageCloneEngine."
+                "Bouton ExtractMe : Propulsé par GASTROengine (DeviceProfiler + ShellOrchestrator + FileExtractor + FsParser), extrait en lecture seule tous les éléments matériels et logiciels de votre téléphone vers ROM_FORGE/EXTRACT/.",
+                "Isolation Sandbox ShellOrchestrator : Aucune écriture n'est jamais effectuée sur le système du téléphone (politique RO-Host / RW-Workspace stricte).",
+                "Éléments capturés dans EXTRACT/ : device_dna_profile.json, proc_mounts_snapshot.txt, partitions_layout.txt, init_services_dna.txt, host_symlinks_topology.txt (/product, /system_ext, /vendor, /odm, /init), fsparser_xattr_permissions.txt, ainsi que l'analyse dynamique double partition (system_fod_logic/ et vendor_fod_logic/)."
             )
         )
 
-        drawSubHeader("1.3. FOD Fix — Deux Solutions Complètes (Onglet 2 : Porter / FOD Fix)")
+        drawSubHeader("1.3. PORTER — Plateforme de Portage GSI (PORT • PORTERPLAN • FOD : SCAN, AISCAN, FOD Fix 1, 2 & 3)")
         drawBulletList(
             listOf(
-                "FOD Fix Solution 2 (RECOMMANDÉ • Sans Modifier ni Re-signer les APKs + Repack Simple & Intelligent 1:1) : Ne touche à AUCUN APK existant (0 modification de framework-res.apk ou SystemUI.apk, 0 re-signature v1/v2/v3, 0 invalidation des .odex/.vdex/.art). Injecte chirurgicalement sur le clone 1:1 de l'image de base : (1) le script d'initialisation /system/etc/init/init.tucana.fod.rc (droits sysfs HBM 0x20000 sur /sys/class/drm/card0-DSI-1/disp_param, fod_ui_ready, /dev/goodix_fp, /sys/devices/virtual/touch/tp_dev/fod_status), (2) le keylayout /system/usr/keylayout/uinput-goodix.kl (key 338 SYSTEM_NAVIGATION_UP), (3) la configuration système /system/etc/sysconfig/xiaomi_tucana_fod_config.xml, et (4) les propriétés biométriques PHH-Treble/Xiaomi dans build.prop (ro.hardware.fp.fod=true, persist.sys.phh.fod.xiaomi=true, persist.vendor.sys.fp.fod.location.X_Y=445,1910, persist.vendor.sys.fp.fod.size.width_height=190,190).",
-                "Protection Anti-Bootloop Stage 1 & Stage 2 intégrée au FOD Fix Solution 2 : Préserve à 100% /system/etc/vintf/manifest.xml (aucune injection de HAL vendor.* dans un manifeste type='framework' qui bloquerait libvintf/hwservicemanager), préserve à 100% /system/etc/selinux/ (aucun fichier .cil conflictuel qui ferait échouer secilc au Stage 1 init, ni écrasement de plat_file_contexts), et n'injecte aucun binaire ELF stub de 256 octets ni APK non compilé par aapt2 dans /system/product/overlay/.",
-                "FOD Fix Solution 1 (Patch APK In-Place + Régénération AOSP OAT/VDEX/ODEX + Cascade de Confiance R.E.C.O.R.E) : Enrichit framework-res.apk et SystemUI.apk avec un chunk binaire AXML aligné 4-octets (RES_XML_TYPE 0x0003) en conservant resources.arsc en mode STORED non compressé, puis régénère automatiquement les fichiers .odex, .vdex et .fsv_meta dépendants via ArtGeneratorEngine."
+                "Sélection de l'OS Unpacké & Bouton PORT : Déverrouillé dès qu'un extract est présent dans ROM_FORGE/EXTRACT/. Crée le portage complet du Device Tree (blobs, RRO, audio, display, SELinux, VINTF) vers l'OS unpacké sélectionné.",
+                "Page dédiée PORTERPLAN : Compare l'architecture du GSI unpacké avec celle du téléphone (StructureAligner & VintfReconciler), explique pourquoi chaque sous-système fonctionne dans votre ROM actuelle et pourquoi il échoue dans le GSI, et dresse la liste exacte des éléments à porter.",
+                "Page dédiée FOD — Sonde Dynamique Double Partition (HostSystemAndVendorFodProbe) : Scanne à la fois la partition /system (/product, /system_ext) ET la partition /vendor (/odm, /sys, /dev) du téléphone pour comprendre comment le système hôte pilote le FOD (keylayout dynamique, keycode 338/304, coordonnées X/Y/Rayon, nœuds sysfs HBM/DimLayer/Touch).",
+                "Boutons SCAN & AISCAN : SCAN compare le GSI avec les fichiers extraits d'EXTRACTOR ; AISCAN interroge le cerveau IA gratuit (Gemini 2.5 Flash / Pro via BuildConfig.GEMINI_API_KEY avec rotation Anti-Quota et cache local) combiné à GASTROengine.",
+                "Trois niveaux de correction FOD (FOD fix 1, FOD fix 2, FOD fix 3) : (1) FOD fix 1 (Solution Complète Stock-Grade : patch APK AXML aligné 4 octets + RRO + régénération OAT/VDEX/fsv_meta), (2) FOD fix 2 (Solution Bidouillage Zéro-APK : injection directe dans l'OS unpacké sans repacker et sans modifier aucun APK), (3) FOD fix 3 (Assisté par l'IA + GASTROengine + R.E.C.O.R.E : alignement symlinks, synthèse dynamique /system+/vendor, overlays RRO compilés ResTable_header 0x0002 / AXML 0x0003 et preuve formelle Z3)."
             )
         )
 
-        drawSubHeader("1.4. Sign PRO Intelligent & Tout Signer Pro (Onglet 4 : Sign Pro)")
+        drawSubHeader("1.4. CREATION — Le Graal de la Reconstruction OS de A à Z (MAKE IMG & MAKE ROM en 12 Étapes)")
         drawBulletList(
             listOf(
-                "Cartographie du Graphe de Signatures de Base : Scanne tous les APKs et conteneurs APEX de l'image décompressée, identifie le certificat X.509 (SHA-256) de chaque APK et les regroupe en clusters de clés (platform, shared, media, networkstack, testkey).",
-                "Détection de Delta & Popup d'Avertissement : Compare les APKs actuels au snapshot de base. Si aucune signature ou APK n'a été modifié depuis l'unpack, affiche une boîte de dialogue d'avertissement permettant d'Annuler (recommandé pour préserver les signatures AOSP d'origine) ou de Signer quand même.",
-                "Deux modes de re-signature complète : (1) 'Tout Signer' (re-signature rapide en respectant la topologie des N clés détectées) et (2) 'Tout Signer Pro (Cascade A-Z)' qui re-signe chaque cluster avec une clé RSA-2048 dédiée, synchronise /system/etc/security/otacerts.zip et /system/etc/selinux/plat_mac_permissions.xml, régénère tous les .odex/.vdex/.fsv_meta via ArtGeneratorEngine et reconstruit vbmeta.img."
+                "Objectif : Reconstruire un système Android complet de A à Z à partir du GSI unpacké choisi et de l'ADN extrait dans EXTRACT/, exactement comme une compilation AOSP/LineageOS depuis le code source (lunch + mka systemimage / mka bacon).",
+                "Pipeline A-à-Z en 12 Étapes Unifiées : [1/12] EXTRACTOR (DeviceProfiler) -> [2/12] StructureAligner (SAR & Symlinks) -> [3/12] AiPortingAgent (Plan IA Gemini + Anti-Quota) -> [4/12] PORTER (Greffe Device Tree) -> [5/12] FOD Engine (FOD Fix 3 dynamique) -> [6/12] VintfReconciler (ELF64 & HIDL/AIDL) -> [7/12] KEY MAKER (Clés RSA-2048) -> [8/12] SIGN PRO (Signature 4K des Overlays RRO sans corrompre les APKs système) -> [9/12] GENERATOR (Synchronisation ART .odex/.vdex/.fsv_meta) -> [10/12] COMPILATOR & FsParser (Audit POSIX init 0750 & SELinux) -> [11/12] R.E.C.O.R.E (SCANNER 16 rapports + COMPARE + Z3 SMT + Reconstruction 1:1) -> [12/12] CROSS-VERIFIER.",
+                "Bouton MAKE IMG : Exécute les 12 étapes et génère l'image bootable GASTRO_<gsi>_source_built.img + vbmeta.img dans ROM_FORGE/CREATION/ et ROM_FORGE/PACKED/.",
+                "Bouton MAKE ROM : Exécute les 12 étapes puis assemble une archive Custom ROM complète flashable en Recovery/Sideload (.zip) contenant META-INF/com/google/android/updater-script, update-binary, dynamic_partitions_op_list (redimensionnement super), system.img, vbmeta.img, otacert et le dossier EXTRACT_DNA/."
             )
         )
 
-        drawSubHeader("1.5. Moteur R.E.C.O.R.E à 12 Piliers (Onglet 5 : R.E.C.O.R.E)")
+        drawSubHeader("1.5. Key Maker, Sign Pro & Generator (Chaîne Cryptographique & Bytecode ART)")
         drawBulletList(
             listOf(
-                "Pilier 1 — Empreinte Structurelle 1:1 de l'Image de Base : Vérifie la conformité avec ROM_FORGE_META/base_img_snapshot.txt (0 modification = sortie 100% identique bit-à-bit).",
-                "Pilier 2 — Inspection Universelle des Artefacts (OAT, VDEX, ODEX, ART, fsv_meta, prof,cil, vintf) & Chaîne de Cascade : Détecte tout fichier modifié et calcule la cascade exacte des dépendances devant être régénérées.",
-                "Pilier 3 — Analyseur ELF64 AArch64 (.dynsym / .dynstr / DT_NEEDED) & Générateur de Shims : Inspecte les binaires ELF64 et génère des ponts binaires dans ROM_FORGE_META/shims/ sans polluer /system/lib64/.",
-                "Pilier 4 — Parseur & Simulateur de Séquence Boot init.rc : Simule l'ordre d'exécution early-init -> init -> late-init -> post-fs-data -> boot.",
-                "Pilier 5 — Solveur Formelle SMT/SAT des Dépendances de Boot : Modélise les contraintes critiques (bin/init 0750, SELinux contexts, VINTF, OAT/VDEX, Superblock EXT4) sous forme de clauses booléennes SMT-LIB2.",
-                "Pilier 6 — Graphe Acyclique Dirigé (DAG) de Démarrage : Visualise les dépendances de la couche Kernel/Stage1 jusqu'à SystemServer et SystemUI.",
-                "Piliers 7 & 8 — Chaîne de Confiance Interne & Auto-Guérison : Vérifie l'alignement 4-octets STORED de resources.arsc, otacerts.zip et plat_mac_permissions.xml sans jamais re-signer de manière destructrice les APKs intacts.",
-                "Piliers 9, 10, 11 & 12 — Sandbox Pré-Boot ARM64, Analyseur de Crash/Last_Kmsg, Constructeur Chirurgical In-Place 1:1 et Orchestrateur de Régénération AOSP."
+                "Key Maker : Génère les paires de clés RSA-2048 X.509v3 (.pk8 et .x509.pem) + manifest.json (Clé Note) dans ROM_FORGE/KEY/.",
+                "Sign Pro (Cartographie Multi-Clés, Sign All & Sign All Pro) : Détecte automatiquement s'il y a 1, 4, 5, 6, 8+ certificats distincts dans l'image, génère les clés correspondantes, et propose 'Sign All' (signature pure des APKs uniquement par cluster de rôle) et 'Sign All Pro' (signature APKs + mise à jour plat_mac_permissions.xml, otacerts.zip et régénération complète .odex/.vdex/.oat/.art/.fsv_meta).",
+                "Generator (ArtGeneratorEngine) : Analyse la version exacte d'OAT (ex: 195/225/238) et VDEX (021/027) de l'image de base et régénère des artefacts ELF64 OAT, VDEX et fs-verity (.fsv_meta) 100% conformes AOSP."
             )
         )
 
-        drawSubHeader("1.6. Régénérateur AOSP Robuste OAT / VDEX / ODEX / fsv_meta (ArtGeneratorEngine)")
+        drawSubHeader("1.6. R.E.C.O.R.E (Moteur de Fond : SCANNER 16 Rapports + COMPARE + Solveur Z3 SMT)")
         drawBulletList(
             listOf(
-                "Profilage Natif du Compilateur AOSP d'Origine : Scanne les fichiers .odex et .vdex existants de la ROM pour extraire la version exacte d'OAT (ex: 195, 225, 238 pour Android 12–15), la version VDEX (021 / 027), le jeu d'instructions (arm64) et la présence de boot.art.",
-                "Synthèse Binaire Conforme AOSP : Génère des en-têtes ELF64 OAT (symbole oatdata, rodata, oatexec, instruction_set=kArm64, oat_dex_files_offset), des conteneurs VDEX (magic vdex, verifier_deps, quickening_info, CRC32 des classes.dex extraits de l'APK) et les métadonnées fs-verity (.fsv_meta SHA-256 Merkle)."
+                "Opère automatiquement en arrière-plan pour assister Compilator, PORTER, FOD et CREATION sans alourdir la navigation.",
+                "Moteur SCANNER (16 Rapports Exhaustifs) : Génère et maintient 16 rapports JSON/TXT dans KEY/Data/recore_scanner_reports/ couvrant chaque sous-système (01_apks_and_signatures, 02_art_oat_vdex_odex, 03_elf64_native_binaries, 04_selinux_contexts_and_mac, 05_vintf_and_hal_manifests, 06_init_rc_boot_scripts, 07_symlinks_and_sar_topology, etc.).",
+                "Moteur COMPARE & Solveur Formelle Z3 SMT : Compare l'état initial et l'état post-modification, vérifie que toutes les dépendances en cascade sont satisfaites (Z3 = SAT) et garantit un score de confiance boot optimal avant toute création d'image."
             )
         )
 
         // =========================================================================
         // SECTION 2: LISTE COMPLÈTE DES OUTILS & MOTEURS COMPOSANT L'APPLICATION
         // =========================================================================
-        drawSectionBanner("2", "INVENTAIRE COMPLET DES OUTILS & MOTEURS INTERNES DE L'APPLICATION")
+        drawSectionBanner("2", "INVENTAIRE COMPLET DES OUTILS & MOTEURS INTERNES (KOTLIN + GASTROENGINE RUST)")
         drawBulletList(
             listOf(
-                "1. ExactImageCloneEngine (core/img/ExactImageCloneEngine.kt) : Moteur de clonage 1:1 bit-à-bit Sparse/Raw et mutateur EXT4 chirurgical In-Place avec allocation Copy-On-Write (CoW), désactivation propre de METADATA_CSUM/GDT_CSUM lors d'une greffe, support des répertoires HTree et troncature sécurisée du footer AVB 2.0.",
-                "2. Ext4UserspaceExtractor (core/img/Ext4UserspaceExtractor.kt) : Extracteur EXT4 100% userspace lisant le Superblock (offset 1024), les descripteurs de groupes 32/64-bit, les arbres d'extents (0xF30A), les xattrs inline/externes (0xEA020000) et enregistrant la carte physique exacte des blocs de chaque inode (exact_inode_extents_map.txt).",
-                "3. Ext4UserspaceBuilder (core/img/Ext4UserspaceBuilder.kt) : Constructeur EXT4 100% userspace reproduisant la géométrie du Superblock d'origine (UUID, Hash Seed HTree, flags incompat/ro_compat sans SPARSE_SUPER non initialisé).",
-                "4. ErofsUserspaceBuilder (core/img/ErofsUserspaceBuilder.kt) : Constructeur d'images EROFS (magic 0xE0F5E1E2) en lecture seule haute performance.",
-                "5. AospTopologyResolver (core/img/AospTopologyResolver.kt) : Détecteur et résolveur de topologie AOSP (SAR System-As-Root vs Flat) préservant les symlinks /product -> /system/product et protégeant plat_file_contexts.",
-                "6. UkaConfigHelper (core/img/UkaConfigHelper.kt) : Gestionnaire des fichiers de configuration compatibles UKA v5.27 (system_fs_config, system_file_contexts, system_size.txt, system_space.txt).",
-                "7. PayloadDumperEngine (core/archive/PayloadDumperEngine.kt) : Décodeur de flux OTA payload.bin (magic CrAU, manifeste Protobuf DeltaArchiveManifest, opérations REPLACE / REPLACE_XZ / REPLACE_BZ).",
-                "8. LpUnpackEngine (core/archive/LpUnpackEngine.kt) : Décodeur de partitions dynamiques super.img (LpMetadataGeometry 0x616C4467, LpMetadataHeader 0x414C5030, tables d'extents linéaires system_a/product_a/vendor_a).",
-                "9. BrotliSdatEngine (core/archive/BrotliSdatEngine.kt) : Décompresseur Brotli (.new.dat.br) et interpréteur de commandes de blocs .transfer.list (new, zero, erase).",
-                "10. AutoPorterEngine (modules/porter/AutoPorterEngine.kt) : Moteur de portage GSI et de correction biométrique optique UDFPS/FOD (Solutions 1 et 2).",
-                "11. ImgCompilerEngine (modules/compiler/ImgCompilerEngine.kt) : Orchestrateur de pré-audit statique, Repack Simple & Intelligent 1:1, Repack UKA EXT4/EROFS et génération VBMeta AVB 2.0.",
-                "12. SignProEngine (modules/signpro/SignProEngine.kt) : Analyseur de graphe de certificats APK/APEX, générateur de clés RSA-2048 X.509/PK8 et moteur de re-signature en cascade.",
-                "13. ArtGeneratorEngine (modules/art/ArtGeneratorEngine.kt) : Compilateur synthétique AOSP d'artefacts .odex, .vdex, .art et .fsv_meta.",
-                "14. RecoreEngine (core/recore/RecoreEngine.kt) : Moteur d'intelligence centrale à 12 Piliers (Blueprint 1:1, Cascade Artefacts, ELF64 Shims, Init.rc, Solveur SMT/SAT, Sandbox ARM64, Reconstruction 1:1).",
-                "15. MagiskPatcherEngine (modules/magisk/MagiskPatcherEngine.kt) : Analyseur et patcheur de boot.img / init_boot.img (formats d'en-tête v1–v4, ramdisk cpio, magiskinit).",
-                "16. RomForgeStorageManager (core/storage/RomForgeStorageManager.kt) : Gestionnaire de stockage et d'exportation directe vers le dossier public Téléchargements (Downloads/ROM_FORGE/) via MediaStore / File API."
+                "1. GastroEngine (core/gastro/GastroEngine.kt) : Orchestrateur central réunissant les 10 sous-systèmes Rust (intelligence_hub, ShellOrchestrator, rom_toolchain, TaskPipeline, DeviceProfiler, VintfReconciler_DependencyAnalyzer, AiPortingAgent, FileExtractor, FsParser, StructureAligner) et le pipeline Graal MAKE IMG / MAKE ROM en 12 étapes.",
+                "2. HostSystemAndVendorFodProbe (modules/porter/HostSystemAndVendorFodProbe.kt) : Sonde dynamique inspectant à la fois /system (/product, /system_ext) et /vendor (/odm, /sys, /dev) du téléphone pour synthétiser un fix FOD non-statique sur mesure.",
+                "3. RecoreEngine & RecoreScannerAndCompareEngines (core/recore/) : Moteur déterministe à 12 Piliers avec SCANNER (16 rapports), COMPARE et solveur Z3 SMT.",
+                "4. ExactImageCloneEngine (core/img/ExactImageCloneEngine.kt) : Clonage 1:1 bit-à-bit Sparse/Raw et mutateur EXT4 chirurgical In-Place avec Copy-On-Write (CoW), support HTree, désactivation propre de METADATA_CSUM lors d'une greffe et ajustement AVB 2.0.",
+                "5. Ext4UserspaceExtractor & Ext4UserspaceBuilder (core/img/) : Décompilateur et constructeur EXT4 100% userspace fidèles au Superblock 0xEF53 et aux xattrs SELinux.",
+                "6. ErofsUserspaceExtractor & ErofsUserspaceBuilder (core/img/) : Extracteur et constructeur EROFS v1 (magic 0xE0F5E1E2).",
+                "7. AospTopologyResolver & UkaConfigHelper (core/img/) : Aligneur de topologie SAR (/system/system vs /system) et gestionnaire des tables UKA v5.27 (fs_config, file_contexts).",
+                "8. AutoPorterEngine (modules/porter/AutoPorterEngine.kt) : Moteur de portage GSI et des 3 solutions FOD Fix (FOD fix 1, FOD fix 2, FOD fix 3).",
+                "9. SignProEngine & KeyMakerEngine (modules/signpro/, modules/keymaker/) : Cartographie multi-clés N-clusters, génération RSA-2048 et signature Sign All / Sign All Pro.",
+                "10. ArtGeneratorEngine (modules/generator/ArtGeneratorEngine.kt) : Profilage et régénération AOSP des fichiers .odex, .vdex, .oat, .art et .fsv_meta.",
+                "11. ImgCompilerEngine & CrossVerifierEngine (modules/compiler/, core/verifier/) : Pré-audit statique, compilation .img/vbmeta.img et vérification croisée AOSP.",
+                "12. HybridShellEngine & RomForgeStorageManager (core/shell/, core/storage/) : Exécuteur hybride Root/Userspace et synchronisation publique vers /storage/emulated/0/ROM_FORGE/."
             )
         )
 
@@ -372,11 +367,11 @@ object RomForgePdfManualGenerator {
         drawSectionBanner("3", "MANUEL D'UTILISATION COMPLET PAS-À-PAS")
         drawBulletList(
             listOf(
-                "Étape 1 — Importer et Unpacker une image (.img / payload.bin / super.img) : Ouvrez l'onglet 1 'Extract'. Cliquez sur 'Sélectionner un fichier (.img / .bin / .br)' pour choisir votre GSI ou ROM. L'application copie la référence de l'image source, extrait l'intégralité de l'arborescence dans ROM_FORGE/UNPACK/system_ext4/ et enregistre automatiquement le snapshot immuable 1:1 (ROM_FORGE_META/base_img_snapshot.txt et exact_inode_extents_map.txt).",
-                "Étape 2 — Tester le Repack Simple & Intelligent 1:1 (Validation DSU Sideloader sans modification) : Allez dans l'onglet 3 'Compile' et cliquez sur le bouton vert 'Repack Simple & Intelligent 1:1 (Identique à l'Original • DSU Ready)'. Si vous n'avez rien modifié après l'unpack, le moteur produit une image 100% identique bit-à-bit à votre GSI initial et l'exporte dans Téléchargements/ROM_FORGE/PACKED/system_repacked_1to1.img.",
-                "Étape 3 — Appliquer le FOD Fix Solution 2 (Recommandé pour booter sur DSU Sideloader avec FOD actif) : Ouvrez l'onglet 2 'Porter'. Cliquez sur le bouton 'FOD Fix Solution 2 : Overlays + Nouveaux Éléments + Repack Simple & Intelligent 1:1 (Zéro APK Modifié)'. Le moteur copie l'arborescence dans ROM_FORGE/PORT/, greffe chirurgicalement init.tucana.fod.rc, uinput-goodix.kl, xiaomi_tucana_fod_config.xml et les propriétés FOD dans build.prop sur un clone 1:1 de l'image de base, sans toucher à aucun APK ni à SELinux/VINTF, et exporte l'image prête à démarrer dans Téléchargements/ROM_FORGE/PORT/.",
-                "Étape 4 — Utiliser R.E.C.O.R.E (Onglet 5) : Cliquez sur 'Lancer l'Audit & Auto-Guérison R.E.C.O.R.E' pour inspecter les 12 Piliers (Blueprint 1:1, cascade OAT/VDEX, solveur SMT/SAT, simulation init.rc). Cliquez ensuite sur 'Reconstruire & Compiler .IMG Bootable (Fidélité 1:1 R.E.C.O.R.E)' pour générer une image fidèle à l'originale intégrant vos modifications.",
-                "Étape 5 — Utiliser Sign PRO (Onglet 4) : Cliquez sur 'Scanner le Graphe de Signatures de l'Image' pour visualiser les clés détectées. N'utilisez 'Tout Signer Pro' que si vous avez remplacé ou modifié manuellement des APKs système et souhaitez reconstruire toute la chaîne de certificats et régénérer les .odex/.vdex."
+                "Étape 1 — Décompiler un GSI ou une image système (Compilator -> Unpack) : Ouvrez Compilator dans la barre latérale, cliquez sur 'Choisir .IMG à Décompiler' pour extraire votre image dans ROM_FORGE/UNPACK/<nom>/ avec son snapshot immuable 1:1.",
+                "Étape 2 — Extraire l'ADN du téléphone (EXTRACTOR -> ExtractMe) : Ouvrez EXTRACTOR dans la barre latérale et cliquez sur 'ExtractMe (Extraire Téléphone -> Dossier EXTRACT/)'. Le moteur sonde /system et /vendor en lecture seule et isole tous les fichiers dans ROM_FORGE/EXTRACT/.",
+                "Étape 3 — Analyser et Porter (PORTER -> PORTERPLAN / PORT / FOD) : Ouvrez PORTER, sélectionnez l'OS unpacké dans la liste déroulante. Consultez 'PORTERPLAN' pour voir les différences d'architecture, cliquez sur 'PORT' pour porter le Device Tree, ou ouvrez 'FOD' pour lancer SCAN, AISCAN et appliquer FOD fix 1, FOD fix 2 ou FOD fix 3.",
+                "Étape 4 — Reconstruire un OS complet de A à Z (CREATION -> MAKE IMG / MAKE ROM) : Ouvrez CREATION, choisissez votre GSI unpacké et cliquez sur 'MAKE IMG' (pour générer l'image .img bootable en 12 étapes) ou sur 'MAKE ROM' (pour créer la Custom ROM complète en .zip flashable).",
+                "Étape 5 — Signer ou vérifier les clés (Key Maker & Sign Pro) : Utilisez 'Sign All' pour signer uniquement les APKs par cluster de clés, ou 'Sign All Pro' pour signer les APKs et régénérer toute la chaîne XML + OAT/VDEX/fsv_meta."
             )
         )
 
@@ -385,105 +380,83 @@ object RomForgePdfManualGenerator {
         // =========================================================================
         drawSectionBanner("4", "STRUCTURE DE L'APPLICATION & ARBORESCENCE COMPLÈTE (CODE & WORKSPACE)")
         drawParagraph(
-            "L'application suit l'architecture Clean MVVM avec Jetpack Compose (Material 3), Kotlin Coroutines/Flow et Room Database. " +
-                    "Voici l'arborescence exacte de tous les packages et fichiers sources Kotlin de l'application ainsi que l'arborescence du dossier de travail ROM_FORGE :"
+            "L'application suit l'architecture Clean MVVM avec Jetpack Compose (Material 3), Kotlin Coroutines/Flow, Retrofit/OkHttp (API Gemini gratuite avec Anti-Quota) et Room Database. " +
+                    "Voici l'arborescence exacte des packages et fichiers sources Kotlin ainsi que du dossier ROM_FORGE :"
         )
         drawCodeOrTreeBlock(
             listOf(
                 "app/src/main/java/com/example/",
-                "├── MainActivity.kt                      # Point d'entrée Edge-to-Edge, Navigation 8 onglets (KeyMaker, SignPro, Generator, Compiler, Porting, R.E.C.O.R.E, Console, Paramètres)",
+                "├── MainActivity.kt                               # Navigation : 7 modules Sidebar + 3 volets BottomBar (Action, Console, Paramètres)",
                 "├── core/",
-                "│   ├── assets/",
-                "│   │   └── AssetBinaryManager.kt        # Extraction & vérification des binaires natifs (mke2fs, e2fsdroid, simg2img, img2simg, lpunpack, avbtool, dex2oat, secilc)",
-                "│   ├── docs/",
-                "│   │   └── RomForgePdfManualGenerator.kt# Générateur PDF natif de documentation technique, manuel d'utilisation, arborescence & audit IA",
+                "│   ├── assets/AssetBinaryManager.kt              # Extraction des binaires natifs & peuplement AOSP de référence",
+                "│   ├── docs/RomForgePdfManualGenerator.kt        # Générateur PDF natif de documentation technique, arborescence & audit IA",
+                "│   ├── gastro/GastroEngine.kt                    # Cœur GASTROengine (10 modules Rust + IA Gemini Anti-Quota + MAKE IMG/ROM 12 étapes)",
                 "│   ├── img/",
-                "│   │   ├── AospTopologyResolver.kt      # Résolveur topologie AOSP SAR (/system/system) vs Flat (/system) & protection SELinux plat_file_contexts",
-                "│   │   ├── ErofsUserspaceBuilder.kt     # Constructeur d'images EROFS (magic 0xE0F5E1E2)",
-                "│   │   ├── ExactImageCloneEngine.kt     # Clonage 1:1 bit-à-bit Sparse/Raw & Mutateur Chirurgical EXT4 In-Place (Copy-on-Write, HTree, METADATA_CSUM, AVB Trim)",
-                "│   │   ├── Ext4UserspaceBuilder.kt      # Constructeur EXT4 100% userspace fidèle au Superblock d'origine (UUID, Hash Seed, flags)",
-                "│   │   ├── Ext4UserspaceExtractor.kt    # Extracteur EXT4 100% userspace + snapshot immuable base_img_snapshot.txt + exact_inode_extents_map.txt",
-                "│   │   └── UkaConfigHelper.kt           # Synchronisation tables UKA v5.27 (system_fs_config, system_file_contexts, system_size.txt, system_space.txt)",
+                "│   │   ├── AospTopologyResolver.kt               # Aligneur topologie SAR (/system/system vs /system) & protection SELinux",
+                "│   │   ├── ErofsUserspaceBuilder.kt              # Constructeur d'images EROFS v1 (0xE0F5E1E2)",
+                "│   │   ├── ErofsUserspaceExtractor.kt            # Extracteur d'images EROFS v1",
+                "│   │   ├── ExactImageCloneEngine.kt              # Clonage 1:1 bit-à-bit & Mutateur Chirurgical EXT4 In-Place (CoW, HTree, AVB)",
+                "│   │   ├── Ext4UserspaceBuilder.kt               # Constructeur EXT4 100% userspace fidèle au Superblock d'origine",
+                "│   │   ├── Ext4UserspaceExtractor.kt             # Extracteur EXT4 100% userspace + snapshot immuable 1:1",
+                "│   │   └── UkaConfigHelper.kt                    # Synchronisation tables UKA v5.27 (fs_config, file_contexts)",
                 "│   ├── recore/",
-                "│   │   └── RecoreEngine.kt              # Moteur intelligent à 12 Piliers (Blueprint 1:1, Cascade OAT/VDEX, ELF64 Shims, Init.rc, Solveur SMT/SAT, Reconstruction 1:1)",
-                "│   ├── shell/",
-                "│   │   └── HybridShellEngine.kt         # Exécuteur hybride Root Loopback / Userspace Non-Root & inspecteur binaire d'images",
-                "│   ├── storage/",
-                "│   │   └── RomForgeStorageManager.kt    # Gestionnaire de l'espace de travail public /storage/emulated/0/ROM_FORGE (UNPACK, PACKED, PORT, KEY, DOCS)",
-                "│   └── verifier/",
-                "│       └── CrossVerifierEngine.kt       # Vérificateur croisé d'intégrité entre clés X.509, APKs, caches ART/VDEX et manifestes SELinux",
+                "│   │   ├── RecoreEngine.kt                       # Moteur de fond R.E.C.O.R.E à 12 Piliers & solveur Z3 SMT",
+                "│   │   ├── RecoreModels.kt                       # Modèles de données R.E.C.O.R.E, DAG, ELF64 et Z3",
+                "│   │   └── RecoreScannerAndCompareEngines.kt     # Moteurs SCANNER (16 rapports détaillés) & COMPARE",
+                "│   ├── shell/HybridShellEngine.kt                # Exécuteur hybride Root/Userspace & ShellOrchestrator",
+                "│   ├── storage/RomForgeStorageManager.kt         # Gestionnaire public /storage/emulated/0/ROM_FORGE (UNPACK, EXTRACT, PORT, CREATION, PACKED, KEY, DOCS)",
+                "│   └── verifier/CrossVerifierEngine.kt           # Vérificateur croisé d'intégrité AOSP",
                 "├── data/",
-                "│   ├── local/",
-                "│   │   └── AppDatabase.kt               # Base SQLite Room (KeyManifestEntity, ArtCacheEntity, VerificationAlertEntity, PortHistoryEntity)",
-                "│   └── repository/",
-                "│       └── RomKitchenRepository.kt      # Dépôt réactif Flow connectant Room aux moteurs et au ViewModel",
+                "│   ├── local/ (AppDatabase.kt, Entities.kt, RomKitchenDao.kt)",
+                "│   └── repository/RomKitchenRepository.kt        # Dépôt réactif Flow",
                 "├── modules/",
-                "│   ├── compiler/",
-                "│   │   └── ImgCompilerEngine.kt         # Unpack/Repack UKA v5.27, Repack Simple & Intelligent 1:1, Pré-Audit Statique & VBMeta AVB 2.0",
-                "│   ├── generator/",
-                "│   │   └── ArtGeneratorEngine.kt        # Régénérateur AOSP intelligent OAT (.odex), VDEX (.vdex), .art & .fsv_meta avec profilage du compilateur d'origine",
-                "│   ├── keymaker/",
-                "│   │   └── KeyMakerEngine.kt            # Générateur cryptographique RSA-2048/4096 PKCS#8 (.pk8) & X.509 (.x509.pem) + manifeste cle_note.json",
+                "│   ├── compiler/ImgCompilerEngine.kt             # Unpack/Repack UKA, Repack Simple & Intelligent 1:1 & VBMeta AVB 2.0",
+                "│   ├── generator/ArtGeneratorEngine.kt           # Régénérateur AOSP OAT (.odex), VDEX (.vdex), .art & .fsv_meta",
+                "│   ├── keymaker/KeyMakerEngine.kt                # Générateur cryptographique RSA-2048 (.pk8 / .x509.pem) & manifest.json",
                 "│   ├── porter/",
-                "│   │   └── AutoPorterEngine.kt          # Portage GSI vers Device Tree & FOD Fix Solution 1 (Patch APK + Régénération) et Solution 2 (Sans Re-signature + Repack 1:1)",
-                "│   └── signpro/",
-                "│       └── SignProEngine.kt             # Cartographie du graphe de signatures APK/APEX, détection de delta, Tout Signer & Tout Signer Pro (Cascade A-Z)",
+                "│   │   ├── AutoPorterEngine.kt                   # Moteur PORTER, PORTERPLAN & FOD Fix 1, 2 et 3",
+                "│   │   └── HostSystemAndVendorFodProbe.kt        # Sonde dynamique double partition (/system + /vendor) pour le FOD",
+                "│   └── signpro/SignProEngine.kt                  # Cartographie multi-clés N-clusters, Sign All & Sign All Pro",
                 "└── ui/",
-                "    ├── RomKitchenViewModel.kt           # ViewModel centralisant l'état StateFlow, l'historique d'actions et l'orchestration des moteurs",
-                "    ├── components/",
-                "    │   └── KitchenCommonComponents.kt   # Composants UI Material 3 réutilisables (cartes techniques, badges de statut, barres de progression)",
-                "    ├── screens/",
-                "    │   ├── KeyMakerScreen.kt            # UI Onglet 1 : Génération et gestion du trousseau cryptographique AOSP",
-                "    │   ├── SignProScreen.kt             # UI Onglet 2 : Sign PRO, Graphe de Clés, Popup d'avertissement & Tout Signer Pro",
-                "    │   ├── GeneratorScreen.kt           # UI Onglet 3 : Régénération AOSP OAT / VDEX / ODEX / fsv_meta",
-                "    │   ├── CompilerScreen.kt            # UI Onglet 4 : Unpack/Repack UKA, Repack Simple & Intelligent 1:1 & VBMeta",
-                "    │   ├── AutoPorterScreen.kt          # UI Onglet 5 : Auto-Porter GSI & FOD Fix Solution 1 et Solution 2",
-                "    │   ├── RecoreScreen.kt              # UI Onglet 6 : Moteur R.E.C.O.R.E à 12 Piliers & Reconstruction 1:1",
-                "    │   ├── ConsoleHistoryScreen.kt      # UI Onglet 7 : Console Temps Réel & Historique des Actions",
-                "    │   └── HelpScreen.kt                # UI Onglet 8 (Paramètres & Aide) : Thème, Stockage, Téléchargement PDF Technique & Guide",
-                "    └── theme/",
-                "        └── Theme.kt                     # Thème Material 3 adaptatif ( Clair / Sombre / Système )"
+                "    ├── RomKitchenViewModel.kt                    # ViewModel centralisant l'état StateFlow et les actions des 7 modules",
+                "    ├── components/CommonComponents.kt            # Barre de statut système, sélecteur UNPACK & composants Material 3",
+                "    ├── screens/ (KeyMakerScreen, SignProScreen, GeneratorScreen, CompilerScreen, ExtractorScreen, AutoPorterScreen, CreationScreen, RecoreScreen, ConsoleHistoryScreen, HelpScreen)",
+                "    └── theme/ (Color.kt, Theme.kt, Type.kt)"
             )
         )
 
-        drawSubHeader("4.2. Arborescence du Dossier de Travail ROM_FORGE/ et des Métadonnées")
+        drawSubHeader("4.2. Arborescence du Dossier de Travail Public ROM_FORGE/")
         drawCodeOrTreeBlock(
             listOf(
-                "ROM_FORGE/",
-                "├── UNPACK/",
-                "│   └── system_ext4/                     # Racine de l'image décompressée",
-                "│       ├── system/                      # Partition système (en topologie SAR System-As-Root)",
-                "│       ├── product -> /system/product   # Symlink AOSP préservé",
-                "│       ├── config/                      # Tables UKA v5.27 (system_fs_config, system_file_contexts)",
-                "│       └── ROM_FORGE_META/              # Métadonnées internes (exclues de l'image finale)",
-                "│           ├── source_img_ref.txt       # Chemin vers le fichier .img original pour clonage 1:1",
-                "│           ├── base_img_snapshot.txt    # Empreinte CRC32, taille et symlinks de chaque fichier initial",
-                "│           └── exact_inode_extents_map.txt # Carte des inodes et blocs 4K physiques d'origine",
-                "├── PORT/",
-                "│   ├── system_ext4_ported_tucana/       # Arborescence portée avec correctifs FOD Solution 1 ou 2",
-                "│   └── system_ext4_ported_tucana.img    # Image .img finale issue du FOD Fix (DSU Sideloader Ready)",
-                "└── PACKED/",
-                "    ├── system_repacked_1to1.img         # Image issue du Repack Simple & Intelligent 1:1",
-                "    ├── system_recore_1to1.img           # Image issue du moteur R.E.C.O.R.E",
-                "    └── vbmeta.img                       # Image VBMeta AVB 2.0 (flags=3 pour désactiver dm-verity)"
+                "/storage/emulated/0/ROM_FORGE/",
+                "├── UNPACK/<nom_gsi>/                # Systèmes .img décompilés + config/ UKA + ROM_FORGE_META/ (snapshot 1:1)",
+                "├── EXTRACT/                         # ADN complet du téléphone extrait par EXTRACTOR (ExtractMe)",
+                "│   ├── device_dna_profile.json      # Profil matériel & logiciel DeviceProfiler",
+                "│   ├── device_dna/                  # proc_mounts_snapshot.txt, partitions_layout.txt, host_symlinks_topology.txt",
+                "│   ├── system_fod_logic/            # Logique FOD extraite de /system (init RC dynamique, keylayout, props /system)",
+                "│   └── vendor_fod_logic/            # Logique FOD extraite de /vendor (nœuds sysfs HBM/DimLayer/Touch, props /vendor)",
+                "├── PORT/                            # Dossiers et images .img portés par PORTER et FOD Fix 1/2/3",
+                "├── CREATION/                        # Images .img (MAKE IMG) et archives Custom ROM flashables .zip (MAKE ROM)",
+                "├── PACKED/                          # Images recompilées (system.img, vbmeta.img) et APKs signés",
+                "├── KEY/ & KEY/Data/                 # Clés RSA-2048 (.pk8/.pem), manifest.json et les 16 rapports SCANNER / SignPro",
+                "└── DOCS/                            # Manuel technique complet & dossier d'audit IA (.PDF)"
             )
         )
 
         // =========================================================================
         // SECTION 5: DIAGNOSTIC TECHNIQUE APPROFONDI (POUR AUDIT PAR UNE AUTRE IA)
         // =========================================================================
-        drawSectionBanner("5", "DIAGNOSTIC TECHNIQUE APPROFONDI & CORRECTIFS ANTI-BOOTLOOP DSU SIDELOADER")
+        drawSectionBanner("5", "DIAGNOSTIC TECHNIQUE APPROFONDI & GARANTIES ANTI-BOOTLOOP (DSU / FASTBOOT / RECOVERY)")
         drawParagraph(
-            "Cette section documente précisément les causes racines qui provoquaient l'arrêt du démarrage avant la bootanimation " +
-                    "lors d'un FOD Fix sur DSU Sideloader, ainsi que les correctifs implémentés dans le code actuel :"
+            "Cette section documente les garanties architecturales implémentées dans GASTRO pour éliminer tout risque de bootloop " +
+                    "lors du Repack, du FOD Fix ou de la reconstruction complète MAKE IMG / MAKE ROM :"
         )
         drawBulletList(
             listOf(
-                "Cause 1 corrigée — Conflit SELinux secilc au Stage 1 Init (/system/etc/selinux/*.cil) : Lors du démarrage (first_stage_init), Android compile tous les fichiers .cil présents dans /system/etc/selinux/ avec /vendor/etc/selinux/vendor_sepolicy.cil via le compilateur secilc. L'ajout d'un fichier recore_fod_sepolicy.cil contenant des déclarations (type hal_fingerprint_default) déjà présentes dans plat_sepolicy.cil ou non mappées dans plat_pub_versioned.cil provoquait un échec fatal de secilc ('Duplicate declaration of type' / 'Failed to compilecil') et un reboot immédiat sur le bootloader avant même le démarrage de surfaceflinger. Correctif : /system/etc/selinux/ et plat_file_contexts ne sont plus jamais modifiés ou pollués.",
-                "Cause 2 corrigée — Rejet VINTF par libvintf (/system/etc/vintf/manifest.xml) : L'injection de HALs propriétaires vendor.xiaomi.* et vendor.goodix.* dans un manifeste déclaré type='framework' dans /system/etc/vintf/ violait la règle stricte de libvintf interdisant les HALs vendor dans la matrice framework, faisant crasher hwservicemanager et servicemanager. Correctif : Le fichier /system/etc/vintf/manifest.xml d'origine du GSI est désormais préservé à 100%.",
-                "Cause 3 corrigée — Écrasement de bibliothèques /system/lib64/ et exécutable stub de 256 octets : Lorsque le dossier stock_vendor_ref ne contenait pas les vrais blobs binaires du téléphone, ensureTucanaBlobsPresent générait des fichiers ELF factices de 256 octets qui étaient copiés dans /system/lib64/ et /system/bin/hw/, provoquant un arrêt du linker64. Correctif : Seules de vraies bibliothèques ELF (> 4 KB) sont copiées si absentes du GSI, et aucun stub de 256 octets n'est injecté dans /system/.",
-                "Cause 4 corrigée — Rejet des Overlays RRO non compilés par idmap2 / PackageManager : Les fichiers APK injectés dans /system/product/overlay/ contenaient du XML texte brut ('<?xml version=\"1.0\"...') au lieu du format binaire compilé AAPT2 ResXMLTree (0x00080003), provoquant une exception fatale dans AssetManager2 lors du scan de /product/overlay/. Correctif : Les archives de référence sont conservées dans ROM_FORGE_META/fod_overlays/ et la configuration système utilise un fichier XML standard AOSP dans /system/etc/sysconfig/ ainsi que les propriétés système PHH-Treble dans build.prop et init.tucana.fod.rc.",
-                "Cause 5 corrigée — Corruption EXT4 SHARED_BLOCKS, METADATA_CSUM et e_value_offs xattr lors de la mutation chirurgicale In-Place : (a) Dans un GSI construit avec e2fsdroid -s (SHARED_BLOCKS 0x4000), réécrire les blocs physiques d'un fichier modifié sur place corrompait d'autres fichiers partageant ces blocs ; ExactImageCloneEngine utilise désormais systématiquement une allocation Copy-on-Write (CoW) de nouveaux blocs libres. (b) Si le Superblock original avait METADATA_CSUM (0x0400) ou GDT_CSUM (0x0010), modifier un inode ou un bloc de répertoire sans recalculer le CRC32C faisait échouer le montage ext4 du noyau ; ces deux flags RO_COMPAT sont désormais désactivés proprement dans le Superblock lors d'une mutation. (c) Dans un inode EXT4 de 256 octets, e_value_offs de l'attribut security.selinux est désormais calculé relativement à IFIRST(header) (offset 164) conformément à fs/ext4/xattr.h du noyau Linux."
+                "Garantie 1 — Préservation Intégrale de SELinux Stage-1 (/system/etc/selinux/*.cil) et VINTF (/system/etc/vintf/manifest.xml) : Aucun fichier .cil conflictuel ni entrée HAL vendor.* illégale dans un manifeste framework n'est injecté, garantissant 100% de réussite de secilc et libvintf au démarrage.",
+                "Garantie 2 — Sonde FOD Double Partition (/system + /vendor) Non-Statique : HostSystemAndVendorFodProbe inspecte comment la partition /system de la ROM hôte dialogue avec /vendor (keylayout exact, keycode 338/304, coordonnées X/Y/Rayon, nœuds sysfs HBM/DimLayer/Touch) et génère des overlays RRO dotés d'une table de ressources binaire valide (ResTable_header 0x0002 + AndroidManifest.xml AXML 0x0003 alignés sur 4 octets).",
+                "Garantie 3 — Chirurgie EXT4 Copy-On-Write (CoW), HTree & Inodes 256 octets : ExactImageCloneEngine alloue de nouveaux blocs libres lors de toute modification (protégeant les blocs partagés SHARED_BLOCKS 0x4000 d'e2fsdroid -s), ajuste proprement METADATA_CSUM/GDT_CSUM et calcule e_value_offs de security.selinux relativement à IFIRST(header) (offset 164).",
+                "Garantie 4 — Clé IA Embarquée à la Compilation (BuildConfig.GEMINI_API_KEY) + Anti-Quota : Injectée automatiquement via AI Studio Secrets ou GitHub Actions (secrets.GEMINI_API_KEY -> .env -> BuildConfig) sans aucune saisie requise dans l'APK, avec rotation automatique entre gemini-2.5-flash, gemini-2.5-pro et gemini-2.0-flash et synthèse formelle locale hors-ligne."
             )
         )
 

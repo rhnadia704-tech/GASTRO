@@ -543,6 +543,7 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                                 KitchenTab.EXTRACTOR -> ExtractorScreen(
                                     uiState = uiState,
                                     onExecuteExtractMe = viewModel::executeExtractorExtractMe,
+                                    onRunJniRustBlobManager = viewModel::executeGastroJniBlobAndLibraryManager,
                                     onNavigateToPorter = { viewModel.selectTab(KitchenTab.AUTO_PORTER) },
                                     onNavigateToCreation = { viewModel.selectTab(KitchenTab.CREATION) }
                                 )
