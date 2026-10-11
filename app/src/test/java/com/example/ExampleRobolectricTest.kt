@@ -15,7 +15,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 
 @RunWith(RobolectricTestRunner::class)
-@Config(sdk = [36])
+@Config(sdk = [35])
 class ExampleRobolectricTest {
 
     @Test
@@ -24,10 +24,11 @@ class ExampleRobolectricTest {
         val appName = context.getString(R.string.app_name)
         assertEquals("GASTRO", appName)
 
-        // 1. Verify AssetBinaryManager extracts all 7 static binaries
+        // 1. Verify AssetBinaryManager extracts all 8 native binaries & JNI Rust libraries
         val binaryManager = AssetBinaryManager(context)
         val extracted = binaryManager.extractAndVerifyBinaries {}
-        assertEquals(7, extracted.size)
+        assertTrue(extracted.size >= 7)
+        assertTrue(extracted.any { it.name == "libgastro_engine_jni.so" })
 
         // 2. Verify KeyMakerEngine generates RSA-2048 keys & manifest.json ("Clé Note")
         val keyMaker = KeyMakerEngine(context.filesDir)

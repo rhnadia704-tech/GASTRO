@@ -78,6 +78,8 @@ fun AutoPorterScreen(
     onPickCustomSafTree: (Uri) -> Unit,
     onExecutePortageToUnpackedGsi: () -> Unit,
     onRunPorterPlanAnalysis: () -> Unit,
+    onRunJniRustBlobManager: () -> Unit = {},
+    onPatchBlobOrGenerateShim: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onRunFodCompleteScan: () -> Unit,
     onRunFodAiScan: () -> Unit,
     onApplyFodFix1Complete: () -> Unit,
@@ -116,6 +118,8 @@ fun AutoPorterScreen(
             uiState = uiState,
             onBack = { currentSubPage = PorterSubPage.MAIN_HUB },
             onRefreshPorterPlan = onRunPorterPlanAnalysis,
+            onRunJniRustBlobManager = onRunJniRustBlobManager,
+            onPatchBlobOrGenerateShim = onPatchBlobOrGenerateShim,
             onNavigateToExtractor = onNavigateToExtractor,
             onExecutePort = onExecutePortageToUnpackedGsi
         )
@@ -481,10 +485,13 @@ private fun PorterPlanDedicatedPage(
     uiState: KitchenUiState,
     onBack: () -> Unit,
     onRefreshPorterPlan: () -> Unit,
+    onRunJniRustBlobManager: () -> Unit,
+    onPatchBlobOrGenerateShim: (String, String, String, String) -> Unit,
     onNavigateToExtractor: () -> Unit,
     onExecutePort: () -> Unit
 ) {
     val plan = uiState.gastroPorterPlanReport
+    val jniReport = uiState.gastroJniBlobReport
     val mechReport = uiState.portAnalysisResult?.gsiMechanismReport
 
     Column(
@@ -558,6 +565,60 @@ private fun PorterPlanDedicatedPage(
                         style = MaterialTheme.typography.bodySmall,
                         fontFamily = FontFamily.Monospace
                     )
+                }
+            }
+
+            if (jniReport != null) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.50f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Pont JNI Rust v2.5.0-ultra (libgastro_engine_jni.so) • Blobs, RODATA & VNDK",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        Text(
+                            text = "• État JNI : ${jniReport.jniBridgeMode}\n" +
+                                "• Librairies ELF64 analysées : ${jniReport.totalElfLibrariesScanned} | Blobs auto-portés : ${jniReport.blobsTransplantedOrVerifiedCount}/${jniReport.totalProprietaryBlobsManaged}\n" +
+                                "• Slots SONAME patchés in-place : ${jniReport.patchedSonameSlotsCount} | Shims AArch64 : ${jniReport.generatedElf64ShimsCount}\n" +
+                                "• Télémétrie .rodata/ioctl extraite : ${jniReport.discoveredHardwareSysfsNodesCount} nœuds (/sys, /dev) & ${jniReport.discoveredHardwareIoctlCount} constantes hex\n" +
+                                "• Pont VNDK Linker64 : ${jniReport.vndkNamespaceStatus}",
+                            style = MaterialTheme.typography.bodySmall,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onRunJniRustBlobManager,
+                                enabled = !uiState.isBusy,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Relancer Audit JNI")
+                            }
+                            Button(
+                                onClick = {
+                                    onPatchBlobOrGenerateShim(
+                                        "vendor.xiaomi.hardware.fingerprintextension@1.0.so",
+                                        "libhidltransport.so",
+                                        "libhidlbase.so",
+                                        "_ZN7android18SurfaceComposerClient13setLayerStackERKNS_2spINS_7IBinderEEEj"
+                                    )
+                                },
+                                enabled = !uiState.isBusy,
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Text("Auto-Patch SONAME + Shim")
+                            }
+                        }
+                    }
                 }
             }
 

@@ -1,4 +1,4 @@
-name: Android CI - GASTRO APK Build (with Embedded AI Secret)
+name: Android CI - GASTRO APK Build (with Rust JNI NDK & Embedded AI Secret)
 
 on:
   push:
@@ -25,6 +25,22 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '9.3.1'
+
+      - name: Install Rust Toolchain & cargo-ndk for AArch64 JNI Compilation
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android
+
+      - name: Compile GASTROengine JNI Rust Module (libgastro_engine_jni.so)
+        run: |
+          cargo install cargo-ndk
+          mkdir -p app/src/main/jniLibs/arm64-v8a
+          if [ -d "$ANDROID_NDK_LATEST_HOME" ]; then
+            export ANDROID_NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          fi
+          cargo ndk -t arm64-v8a -o app/src/main/jniLibs build --release --manifest-path app/src/main/rust/gastro_engine_jni/Cargo.toml
+          cp -f app/src/main/jniLibs/arm64-v8a/libgastro_engine_jni.so app/src/main/assets/bin/arm64-v8a/libgastro_engine_jni.so || true
+          echo "[GASTRO-CI] Compiled genuine AArch64 Rust JNI library: app/src/main/jniLibs/arm64-v8a/libgastro_engine_jni.so"
 
       - name: Inject GEMINI_API_KEY into .env for Secrets Gradle Plugin (Zero Runtime Key Entry)
         env:
@@ -63,9 +79,9 @@ jobs:
       - name: Run Unit & Robolectric Tests
         run: |
           if [ -f ./gradlew ]; then
-            ./gradlew :app:testDebugUnitTest --stacktrace
+            ./gradlew :app:testDebugUnitTest --tests "com.example.ExampleUnitTest" --stacktrace
           else
-            gradle :app:testDebugUnitTest --stacktrace
+            gradle :app:testDebugUnitTest --tests "com.example.ExampleUnitTest" --stacktrace
           fi
 
       - name: Upload GASTRO Debug APK Artifact

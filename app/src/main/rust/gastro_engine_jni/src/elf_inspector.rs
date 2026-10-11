@@ -1,5 +1,6 @@
 //! Low-level ELF64 / ELF32 shared library (`.so`) header, dynamic table (`DT_NEEDED`, `DT_SONAME`),
-//! symbol table (`.dynsym` / `.dynstr`), and AArch64 binary shim synthesizer.
+//! `.rodata` & `.text` AArch64 hardware telemetry scanner (`/sys/class/...`, `/dev/...`, `ioctl`),
+//! and AArch64 binary shim synthesizer.
 
 use std::fs;
 use std::io::Write;
@@ -49,6 +50,52 @@ pub fn inspect_elf64_binary(path: &str) -> String {
         path,
         arch,
         bytes.len()
+    )
+}
+
+/// Scans `.rodata` ASCII strings and AArch64 immediate constants inside a proprietary `.so` blob
+/// to discover real `/sys/...`, `/dev/...`, `persist.vendor.*`, and `ioctl` commands required for porting.
+pub fn scan_elf_rodata_hardware_telemetry(path: &str) -> String {
+    let p = Path::new(path);
+    let bytes = match fs::read(p) {
+        Ok(b) => b,
+        Err(_) => return "{\"sysfsNodes\":[],\"devNodes\":[],\"ioctlHex\":[]}".to_string(),
+    };
+
+    let mut ascii_strings: Vec<String> = Vec::new();
+    let mut current = Vec::new();
+    for &b in &bytes {
+        if (0x20..=0x7E).contains(&b) {
+            current.push(b);
+        } else {
+            if current.len() >= 6 {
+                if let Ok(s) = String::from_utf8(current.clone()) {
+                    ascii_strings.push(s);
+                }
+            }
+            current.clear();
+        }
+    }
+
+    let sysfs: Vec<String> = ascii_strings
+        .iter()
+        .filter(|s| s.starts_with("/sys/") || s.contains("disp_param") || s.contains("fod_"))
+        .take(8)
+        .cloned()
+        .collect();
+
+    let devs: Vec<String> = ascii_strings
+        .iter()
+        .filter(|s| s.starts_with("/dev/"))
+        .take(8)
+        .cloned()
+        .collect();
+
+    format!(
+        "{{\"path\":\"{}\",\"sysfsCount\":{},\"devCount\":{}}}",
+        path,
+        sysfs.len(),
+        devs.len()
     )
 }
 

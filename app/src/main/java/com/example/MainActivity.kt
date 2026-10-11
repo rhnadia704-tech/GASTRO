@@ -544,6 +544,7 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                                     uiState = uiState,
                                     onExecuteExtractMe = viewModel::executeExtractorExtractMe,
                                     onRunJniRustBlobManager = viewModel::executeGastroJniBlobAndLibraryManager,
+                                    onPatchBlobOrGenerateShim = viewModel::executeSurgicalJniBlobPatchOrShim,
                                     onNavigateToPorter = { viewModel.selectTab(KitchenTab.AUTO_PORTER) },
                                     onNavigateToCreation = { viewModel.selectTab(KitchenTab.CREATION) }
                                 )
@@ -555,6 +556,8 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                                     onPickCustomSafTree = viewModel::selectCustomDecompiledDirectoryUri,
                                     onExecutePortageToUnpackedGsi = viewModel::executeGsiToSystemAutoPort,
                                     onRunPorterPlanAnalysis = viewModel::runGastroPorterPlanAnalysis,
+                                    onRunJniRustBlobManager = viewModel::executeGastroJniBlobAndLibraryManager,
+                                    onPatchBlobOrGenerateShim = viewModel::executeSurgicalJniBlobPatchOrShim,
                                     onRunFodCompleteScan = viewModel::runPorterTotalComparativeFodScan,
                                     onRunFodAiScan = viewModel::runGastroAiFodScan,
                                     onApplyFodFix1Complete = viewModel::applyCoherentStockGradeFodFix,

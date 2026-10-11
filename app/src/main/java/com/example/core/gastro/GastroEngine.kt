@@ -369,11 +369,11 @@ class GastroEngine(
         ),
         GastroSubsystemDescriptor(
             id = 11,
-            rustModuleName = "gastro_jni::BlobAndLibManager (libgastro_engine_jni.so)",
-            title = "11. Module JNI Rust • Gestion Bas-Niveau Librairies (.so) & Blobs",
+            rustModuleName = "gastro_jni::BlobAndLibManager (libgastro_engine_jni.so v2.5.0-ultra)",
+            title = "11. Module JNI Rust • Gestion Bas-Niveau Librairies (.so), RODATA & Pont VNDK",
             status = "ACTIF (${GastroJniRustBlobBridge.getJniBridgeStatusSummary()})",
-            description = "Intégration JNI Rust (app/src/main/rust/gastro_engine_jni) pour l'analyse ELF64, la résolution transitive DT_NEEDED, le patch binaire SONAME et la gestion des blobs propriétaires.",
-            telemetryMetric = "5 fonctions JNI C-ABI • ELF64 AArch64 + Shims"
+            description = "Intégration JNI Rust (app/src/main/rust/gastro_engine_jni) pour l'analyse ELF64, le désassemblage .rodata/IOCTL matériel, le patch binaire SONAME, les shims AArch64 et la réconciliation VNDK linker64.",
+            telemetryMetric = "7 fonctions JNI C-ABI • ELF64 + RODATA + VNDK + Shims"
         )
     )
 
@@ -388,6 +388,27 @@ class GastroEngine(
             extractRootDir = extractRootDir.apply { mkdirs() },
             stockVendorRefDir = stockVendorRefDir,
             autoReconcileAndShim = autoReconcileAndShim,
+            onLog = onLog
+        )
+    }
+
+    suspend fun patchSpecificBlobOrGenerateShimViaJni(
+        unpackedGsiDir: File,
+        targetBlobName: String,
+        oldSonameToPatch: String,
+        newSonameReplacement: String,
+        customSymbolToExport: String,
+        onLog: (String) -> Unit
+    ): GastroJniBlobAndLibraryReport = withContext(Dispatchers.IO) {
+        val stockVendorRefDir = File(autoPorterEngine.getPortRootDir(), "stock_vendor_ref").apply { mkdirs() }
+        GastroJniRustBlobBridge.patchSpecificBlobOrGenerateCustomShim(
+            unpackedGsiDir = unpackedGsiDir,
+            extractRootDir = extractRootDir.apply { mkdirs() },
+            stockVendorRefDir = stockVendorRefDir,
+            targetBlobName = targetBlobName,
+            oldSonameToPatch = oldSonameToPatch,
+            newSonameReplacement = newSonameReplacement,
+            customSymbolToExport = customSymbolToExport,
             onLog = onLog
         )
     }
@@ -905,6 +926,11 @@ class GastroEngine(
         }
 
         buildPorterPlanAndAlignStructure(unpackedGsiDir, onLog)
+        runJniRustBlobAndLibraryManager(
+            unpackedGsiDir = unpackedGsiDir,
+            autoReconcileAndShim = true,
+            onLog = onLog
+        )
 
         val totalScan = autoPorterEngine.runFodTotalComparativeScan(
             targetUnpackedGsiDir = unpackedGsiDir,

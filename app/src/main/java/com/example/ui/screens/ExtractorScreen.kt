@@ -31,6 +31,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -53,10 +54,15 @@ fun ExtractorScreen(
     uiState: KitchenUiState,
     onExecuteExtractMe: (Boolean) -> Unit,
     onRunJniRustBlobManager: () -> Unit = {},
+    onPatchBlobOrGenerateShim: (String, String, String, String) -> Unit = { _, _, _, _ -> },
     onNavigateToPorter: () -> Unit,
     onNavigateToCreation: () -> Unit
 ) {
     var combineWithTucanaBase by remember { mutableStateOf(true) }
+    var selectedBlobForSurgery by remember { mutableStateOf("vendor.xiaomi.hardware.fingerprintextension@1.0.so") }
+    var oldSonameInput by remember { mutableStateOf("libhidltransport.so") }
+    var newSonameInput by remember { mutableStateOf("libhidlbase.so") }
+    var customShimSymbolInput by remember { mutableStateOf("_ZN7android18SurfaceComposerClient13setLayerStackERKNS_2spINS_7IBinderEEEj") }
     val dna = uiState.gastroDnaProfile
     val jniReport = uiState.gastroJniBlobReport
 
@@ -306,7 +312,7 @@ fun ExtractorScreen(
             }
         }
 
-        // 4. JNI-Based Rust Module Card: gastro_engine_jni (Low-Level Library & Blob Management)
+        // 4. JNI-Based Rust Module Card: gastro_engine_jni v2.5.0-ultra (Low-Level Library, RODATA, VNDK & Blob Auto-Porting)
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
@@ -326,12 +332,12 @@ fun ExtractorScreen(
                     Spacer(modifier = Modifier.width(8.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Module JNI Rust • Gestion Bas-Niveau Librairies (.so) & Blobs",
+                            text = "Module JNI Rust v2.5.0-ultra • Auto-Portage Bas-Niveau (.so ELF64, RODATA & VNDK)",
                             style = MaterialTheme.typography.titleSmall,
                             fontWeight = FontWeight.ExtraBold
                         )
                         Text(
-                            text = "Crate : app/src/main/rust/gastro_engine_jni • libgastro_engine_jni.so",
+                            text = "Crate : app/src/main/rust/gastro_engine_jni • libgastro_engine_jni.so (7 fonctions JNI C-ABI)",
                             style = MaterialTheme.typography.labelSmall,
                             fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.primary
@@ -340,7 +346,7 @@ fun ExtractorScreen(
                 }
 
                 Text(
-                    text = "Pont JNI C-ABI (GastroJniRustBlobBridge) dédié à l'inspection binaire ELF64 (e_machine, PT_DYNAMIC, DT_NEEDED, SONAME), au patch binaire in-place des slots SONAME, à la génération de shims AArch64 (libshim_gastro_*.so) et à la réconciliation des blobs propriétaires entre EXTRACT/ et UNPACK/${uiState.selectedDecompiledImgName}.",
+                    text = "Moteur ultra-intelligent de portage bas-niveau : inspecte les en-têtes ELF64 (EM_AARCH64, DT_NEEDED, SONAME), désassemble les sections .rodata/.text des blobs pour extraire les vrais chemins /sys, /dev et constantes IOCTL/HBM (0x20000, 0x152), patche les SONAME in-place sans décaler .dynstr, génère les shims binaires AArch64 (libshim_gastro_*.so) et construit le pont VNDK linker64 (ld.config.vndk_bridge.txt).",
                     style = MaterialTheme.typography.bodySmall
                 )
 
@@ -356,10 +362,91 @@ fun ExtractorScreen(
                     Icon(imageVector = Icons.Default.Memory, contentDescription = "JNI Rust Blob Manager")
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Exécuter JNI Rust Blob & Library Manager (${uiState.selectedDecompiledImgName})",
+                        text = "Exécuter Auto-Portage JNI Rust (.so ELF64 + RODATA + VNDK)",
                         style = MaterialTheme.typography.labelLarge,
                         fontWeight = FontWeight.ExtraBold
                     )
+                }
+
+                // Interactive Surgical SONAME Patcher & Custom Shim Synthesizer
+                Surface(
+                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = "Atelier Chirurgical JNI Rust : Patcher SONAME In-Place & Synthétiseur de Shim ELF64",
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        OutlinedTextField(
+                            value = selectedBlobForSurgery,
+                            onValueChange = { selectedBlobForSurgery = it },
+                            label = { Text("Blob .so cible (EXTRACT/ ou UNPACK/)") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("jni_input_target_blob")
+                        )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedTextField(
+                                value = oldSonameInput,
+                                onValueChange = { oldSonameInput = it },
+                                label = { Text("Ancien SONAME (<=)") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("jni_input_old_soname")
+                            )
+                            OutlinedTextField(
+                                value = newSonameInput,
+                                onValueChange = { newSonameInput = it },
+                                label = { Text("Nouveau SONAME (NUL-pad)") },
+                                singleLine = true,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("jni_input_new_soname")
+                            )
+                        }
+                        OutlinedTextField(
+                            value = customShimSymbolInput,
+                            onValueChange = { customShimSymbolInput = it },
+                            label = { Text("Symbole C++/C à exporter dans libshim_gastro_*.so (RET 0xD65F03C0)") },
+                            singleLine = true,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("jni_input_shim_symbol")
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                onPatchBlobOrGenerateShim(
+                                    selectedBlobForSurgery,
+                                    oldSonameInput,
+                                    newSonameInput,
+                                    customShimSymbolInput
+                                )
+                            },
+                            enabled = !uiState.isBusy && selectedBlobForSurgery.isNotBlank(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("btn_jni_surgical_patch_shim")
+                        ) {
+                            Icon(imageVector = Icons.Default.Build, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "Appliquer Patch SONAME In-Place & Générer Shim ELF64",
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                    }
                 }
 
                 if (jniReport != null) {
@@ -380,15 +467,32 @@ fun ExtractorScreen(
                             )
                             Text(
                                 text = "• Librairies ELF64 inspectées : ${jniReport.totalElfLibrariesScanned}\n" +
-                                    "• Blobs propriétaires gérés : ${jniReport.blobsTransplantedOrVerifiedCount}/${jniReport.totalProprietaryBlobsManaged}\n" +
-                                    "• Dépendances DT_NEEDED résolues : ${jniReport.missingDtNeededResolvedCount} | Shims ELF64 AArch64 : ${jniReport.generatedElf64ShimsCount}\n" +
-                                    "• Statut VNDK : ${jniReport.vndkNamespaceStatus}",
+                                    "• Blobs propriétaires auto-portés : ${jniReport.blobsTransplantedOrVerifiedCount}/${jniReport.totalProprietaryBlobsManaged}\n" +
+                                    "• Slots SONAME patchés in-place : ${jniReport.patchedSonameSlotsCount} | Shims ELF64 AArch64 : ${jniReport.generatedElf64ShimsCount}\n" +
+                                    "• Nœuds matériels .rodata découverts : ${jniReport.discoveredHardwareSysfsNodesCount} (/sys, /dev) | Constantes IOCTL/HBM : ${jniReport.discoveredHardwareIoctlCount}\n" +
+                                    "• Pont VNDK Linker64 : ${jniReport.vndkNamespaceStatus}",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontFamily = FontFamily.Monospace
                             )
+                            if (jniReport.autoPortingActionsSummary.isNotEmpty()) {
+                                HorizontalDivider()
+                                Text(
+                                    text = "Actions d'Auto-Portage Exécutées par gastro_engine_jni :",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                jniReport.autoPortingActionsSummary.forEach { step ->
+                                    Text(
+                                        text = "  ✓ $step",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        fontFamily = FontFamily.Monospace,
+                                        color = MaterialTheme.colorScheme.secondary
+                                    )
+                                }
+                            }
                             HorizontalDivider()
                             Text(
-                                text = "Blobs Propriétaires Gérés par gastro_engine_jni :",
+                                text = "Blobs Propriétaires & Télémétrie Binaire .rodata :",
                                 style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold
                             )
@@ -398,6 +502,18 @@ fun ExtractorScreen(
                                     style = MaterialTheme.typography.labelSmall,
                                     fontFamily = FontFamily.Monospace
                                 )
+                                val rodata = blob.rodataTelemetry
+                                if (rodata != null) {
+                                    val hints = (rodata.discoveredSysfsNodes + rodata.discoveredDevNodes + rodata.discoveredIoctlAndMagicHex).take(4)
+                                    if (hints.isNotEmpty()) {
+                                        Text(
+                                            text = "    ↳ .rodata/ioctl : ${hints.joinToString(" | ")}",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            fontFamily = FontFamily.Monospace,
+                                            color = MaterialTheme.colorScheme.primary
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
