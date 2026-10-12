@@ -1,6 +1,6 @@
 {
-  "name": "GASTRO",
-  "description": "GASTRO — Plateforme d'ingénierie Android, de portage de ROM et de reconstruction système à partir de GSI unpackés, propulsée par GASTROengine (Rust) et R.E.C.O.R.E.",
+  "name": "FORGER",
+  "description": "Outil Android simple pour décompiler (UNPACK) et recompiler (REPACK) des images .img dans sdcard/FORGER.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

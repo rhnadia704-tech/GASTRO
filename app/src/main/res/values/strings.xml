@@ -1,16 +1,10 @@
 <resources>
-    <string name="app_name">GASTRO</string>
-    <string name="app_subtitle">Plateforme d\'Ingénierie Android, Portage ROM &amp; GASTROengine (Rust)</string>
-    <string name="nav_key_maker">Key Maker</string>
-    <string name="nav_sign_pro">Sign Pro</string>
-    <string name="nav_generator">Generator</string>
-    <string name="nav_compiler">Compilation</string>
-    <string name="nav_extractor">EXTRACTOR</string>
-    <string name="nav_porter">PORTER</string>
-    <string name="nav_creation">CREATION</string>
-    <string name="mode_root">Mode Root (Loopback / Kernel Mount)</string>
-    <string name="mode_non_root">Mode Non-Root (SAF / Userspace Engine)</string>
-    <string name="terminal_title">Console GASTRO &amp; ShellOrchestrator</string>
+    <string name="app_name">FORGER</string>
+    <string name="app_subtitle">Outil UNPACK &amp; REPACK (.img)</string>
+    <string name="nav_compiler">UNPACK &amp; REPACK</string>
+    <string name="mode_root">Mode Root</string>
+    <string name="mode_non_root">Mode Standard</string>
+    <string name="terminal_title">Journal &amp; Console</string>
     <string name="btn_clear_logs">Effacer</string>
-    <string name="btn_run_verifier">Diagnostic Croisé</string>
+    <string name="btn_run_verifier">Vérifier</string>
 </resources>

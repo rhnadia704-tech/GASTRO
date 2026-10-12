@@ -588,15 +588,13 @@ fun ConsoleHistoryScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "Arborescence Organisée ROM_FORGE",
+                                text = "Dossiers sdcard/FORGER",
                                 style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.ExtraBold
+                                fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "• UNPACK : ${uiState.romForgePublicPath}/UNPACK/<nom_img>\n" +
-                                        "• PACKED : ${uiState.romForgePublicPath}/PACKED/ (Images .img compilées)\n" +
-                                        "• KEY    : ${uiState.romForgePublicPath}/KEY/ & KEY/Data/ (Clés & Rapports JSON/TXT)\n" +
-                                        "• PORT   : ${uiState.romForgePublicPath}/PORT/ (Espace de portage GSI & FOD)",
+                                text = "• UNPACK : sdcard/FORGER/UNPACK/<nom_img>\n" +
+                                        "• PACKED : sdcard/FORGER/PACKED/ (Images .img recompilées)",
                                 style = MaterialTheme.typography.bodySmall,
                                 fontFamily = FontFamily.Monospace
                             )
@@ -606,7 +604,7 @@ fun ConsoleHistoryScreen(
 
                 item {
                     Text(
-                        text = "Systèmes .img Décompilés dans ROM_FORGE/UNPACK (${uiState.availableDecompiledImgs.size})",
+                        text = "Dossiers dans sdcard/FORGER/UNPACK (${uiState.availableDecompiledImgs.size})",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.Bold
                     )
@@ -639,11 +637,11 @@ fun ConsoleHistoryScreen(
                                         Text(
                                             text = folderName,
                                             style = MaterialTheme.typography.titleSmall,
-                                            fontWeight = FontWeight.ExtraBold,
+                                            fontWeight = FontWeight.Bold,
                                             fontFamily = FontFamily.Monospace
                                         )
                                         Text(
-                                            text = "${uiState.romForgePublicPath}/UNPACK/$folderName",
+                                            text = "sdcard/FORGER/UNPACK/$folderName",
                                             style = MaterialTheme.typography.labelSmall,
                                             fontFamily = FontFamily.Monospace,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -667,74 +665,13 @@ fun ConsoleHistoryScreen(
                                 }
                             }
 
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            FilledTonalButton(
+                                onClick = { onSelectDecompiledImgAndNavigate(folderName, KitchenTab.COMPILER) },
+                                modifier = Modifier.fillMaxWidth()
                             ) {
-                                FilledTonalButton(
-                                    onClick = { onSelectDecompiledImgAndNavigate(folderName, KitchenTab.SIGN_PRO) },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(imageVector = Icons.Default.Bolt, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Sign Pro", style = MaterialTheme.typography.labelSmall)
-                                }
-
-                                FilledTonalButton(
-                                    onClick = { onSelectDecompiledImgAndNavigate(folderName, KitchenTab.AUTO_PORTER) },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(imageVector = Icons.Default.Memory, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Porting", style = MaterialTheme.typography.labelSmall)
-                                }
-
-                                FilledTonalButton(
-                                    onClick = { onSelectDecompiledImgAndNavigate(folderName, KitchenTab.COMPILER) },
-                                    modifier = Modifier.weight(1f)
-                                ) {
-                                    Icon(imageVector = Icons.Default.Build, contentDescription = null, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Compilator", style = MaterialTheme.typography.labelSmall)
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (portHistory.isNotEmpty()) {
-                    item {
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "Historique des Portages GSI -> ROM_FORGE/PORT (${portHistory.size})",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    items(portHistory, key = { it.id }) { history ->
-                        Card(
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
-                            )
-                        ) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Text(
-                                    text = "${history.stockDeviceName} -> ${history.gsiTargetName}",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    text = "${history.blobsTransplanted} Blobs • ${history.sepolicyRulesMerged} règles CIL • FOD: ${history.fodStatus}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                Icon(imageVector = Icons.Default.Build, contentDescription = null, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Ouvrir dans UNPACK / REPACK", style = MaterialTheme.typography.labelSmall)
                             }
                         }
                     }

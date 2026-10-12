@@ -242,10 +242,10 @@ class Ext4UserspaceExtractor {
         val blocksCountLo = sb.getInt(0x04).toLong() and 0xFFFFFFFFL
         val freeBlocksLo = sb.getInt(0x0C).toLong() and 0xFFFFFFFFL
         val freeInodes = sb.getInt(0x10).toLong() and 0xFFFFFFFFL
-        val logBlockSize = sb.getInt(0x18)
-        val blockSize = 1024 shl logBlockSize
-        val blocksPerGroup = sb.getInt(0x20).toLong() and 0xFFFFFFFFL
-        val inodesPerGroup = sb.getInt(0x28).toLong() and 0xFFFFFFFFL
+        val logBlockSize = sb.getInt(0x18).coerceIn(0, 6)
+        val blockSize = (1024 shl logBlockSize).coerceAtLeast(1024)
+        val blocksPerGroup = (sb.getInt(0x20).toLong() and 0xFFFFFFFFL).let { if (it <= 0L) (blockSize * 8).toLong() else it }
+        val inodesPerGroup = (sb.getInt(0x28).toLong() and 0xFFFFFFFFL).let { if (it <= 0L) 2048L else it }
         val magic = sb.getShort(0x38).toInt() and 0xFFFF
 
         if (magic != EXT4_SUPER_MAGIC) {
@@ -264,13 +264,13 @@ class Ext4UserspaceExtractor {
             )
         }
 
-        val inodeSize = (sb.getShort(0x58).toInt() and 0xFFFF).let { if (it == 0) 128 else it }
+        val inodeSize = (sb.getShort(0x58).toInt() and 0xFFFF).let { if (it <= 0) 256 else it }
         val featureCompat = sb.getInt(0x5C)
         val featureIncompat = sb.getInt(0x60)
         val featureRoCompat = sb.getInt(0x64)
         val is64Bit = (featureIncompat and 0x80) != 0
         val blocksCountHi = if (is64Bit) (sb.getInt(0x150).toLong() and 0xFFFFFFFFL) else 0L
-        val totalBlocks = (blocksCountHi shl 32) or blocksCountLo
+        val totalBlocks = ((blocksCountHi shl 32) or blocksCountLo).coerceAtLeast(1L)
 
         val rawDescSize = sb.getShort(0xFE).toInt() and 0xFFFF
         val groupDescSize = if (is64Bit && rawDescSize >= 64) rawDescSize else 32
@@ -327,13 +327,15 @@ class Ext4UserspaceExtractor {
         )
 
         val gdtBaseOffset = if (blockSize == 1024) 2048L else blockSize.toLong()
-        val totalGroups = ((totalBlocks + blocksPerGroup - 1) / blocksPerGroup).toInt().coerceAtLeast(1)
+        val safeBlocksPerGroup = blocksPerGroup.coerceAtLeast(1L)
+        val safeInodesPerGroup = inodesPerGroup.coerceAtLeast(1L)
+        val totalGroups = ((totalBlocks + safeBlocksPerGroup - 1) / safeBlocksPerGroup).toInt().coerceIn(1, 65536)
         val gdtBytes = reader.readBytesAt(gdtBaseOffset, totalGroups * groupDescSize)
         val gdtBuf = ByteBuffer.wrap(gdtBytes).order(ByteOrder.LITTLE_ENDIAN)
 
         fun getInodeTableBlockForGroup(groupIdx: Int): Long {
             val base = groupIdx * groupDescSize
-            if (base + 12 > gdtBytes.size) return 0L
+            if (base < 0 || base + 12 > gdtBytes.size) return 0L
             val lo = gdtBuf.getInt(base + 0x08).toLong() and 0xFFFFFFFFL
             val hi = if (groupDescSize >= 64 && base + 0x2C <= gdtBytes.size) {
                 gdtBuf.getInt(base + 0x28).toLong() and 0xFFFFFFFFL
@@ -342,9 +344,9 @@ class Ext4UserspaceExtractor {
         }
 
         fun readInode(inodeNum: Long): ParsedInode? {
-            if (inodeNum < 1 || inodeNum > inodesCount) return null
-            val groupIdx = ((inodeNum - 1) / inodesPerGroup).toInt()
-            val indexInGroup = (inodeNum - 1) % inodesPerGroup
+            if (inodeNum < 1 || (inodesCount > 0 && inodeNum > inodesCount)) return null
+            val groupIdx = ((inodeNum - 1) / safeInodesPerGroup).toInt()
+            val indexInGroup = (inodeNum - 1) % safeInodesPerGroup
             val inodeTableBlock = getInodeTableBlockForGroup(groupIdx)
             if (inodeTableBlock <= 0L) return null
 

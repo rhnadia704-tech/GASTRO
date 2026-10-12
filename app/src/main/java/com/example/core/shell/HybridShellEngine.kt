@@ -347,13 +347,24 @@ class HybridShellEngine(private val binDir: File, private val workspaceDir: File
     fun writeValidExt4Superblock(targetImg: File, volumeName: String, sizeBytes: Long = 64 * 1024L) {
         targetImg.parentFile?.mkdirs()
         RandomAccessFile(targetImg, "rw").use { raf ->
-            raf.setLength(sizeBytes)
-            raf.seek(1024 + 0x38)
-            raf.writeByte(0x53)
-            raf.writeByte(0xEF)
-            raf.seek(1024 + 0x78)
-            val labelBytes = volumeName.toByteArray().copyOf(16)
-            raf.write(labelBytes)
+            raf.setLength(sizeBytes.coerceAtLeast(64 * 1024L))
+            val sb = ByteBuffer.allocate(1024).order(ByteOrder.LITTLE_ENDIAN)
+            val totalBlocks = (sizeBytes.coerceAtLeast(64 * 1024L) / 4096L).toInt().coerceAtLeast(16)
+            sb.putInt(0x00, 2048)        // s_inodes_count
+            sb.putInt(0x04, totalBlocks) // s_blocks_count_lo
+            sb.putInt(0x0C, (totalBlocks - 4).coerceAtLeast(1)) // s_free_blocks_count_lo
+            sb.putInt(0x10, 2036)        // s_free_inodes_count
+            sb.putInt(0x18, 2)           // s_log_block_size = 2 (4096B)
+            sb.putInt(0x20, 32768)       // s_blocks_per_group = 32768
+            sb.putInt(0x28, 2048)        // s_inodes_per_group = 2048
+            sb.putShort(0x38, 0xEF53.toShort()) // s_magic
+            sb.putShort(0x58, 256.toShort())    // s_inode_size = 256
+            sb.putInt(0x64, 0x0002)      // s_feature_ro_compat = EXT4_FEATURE_RO_COMPAT_LARGE_FILE
+            val labelBytes = volumeName.toByteArray(Charsets.UTF_8).copyOf(16)
+            sb.position(0x78)
+            sb.put(labelBytes)
+            raf.seek(1024L)
+            raf.write(sb.array())
         }
     }
 }

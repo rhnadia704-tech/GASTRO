@@ -14,23 +14,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.FolderOpen
-import androidx.compose.material.icons.filled.HealthAndSafety
 import androidx.compose.material.icons.filled.Storage
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.Button
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -68,7 +63,7 @@ fun CompilerScreen(
     ) {
         item {
             Spacer(modifier = Modifier.height(6.dp))
-            // Hybrid IMG Decompiler into /storage/emulated/0/ROM_FORGE/decompiled_imgs/
+            // 1. UNPACK card -> sdcard/FORGER/UNPACK
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
                     modifier = Modifier.padding(16.dp),
@@ -83,12 +78,12 @@ fun CompilerScreen(
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "1. DÉCOMPILATEUR UKA (.IMG EXT4 / EROFS / SPARSE) -> ROM_FORGE/UNPACK",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.ExtraBold
+                                text = "1. UNPACK (Extraire une image .img)",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Extrait l'arborescence complète + config/<part>_fs_config, <part>_file_contexts & symlinks dans /storage/emulated/0/ROM_FORGE/UNPACK/<nom_img>/ (style blackeangel/UKA)",
+                                text = "Extrait le contenu du fichier .img dans sdcard/FORGER/UNPACK/<nom_img>/",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -101,13 +96,14 @@ fun CompilerScreen(
                     ) {
                         FilledTonalButton(
                             onClick = { safImgPicker.launch(arrayOf("*/*")) },
+                            enabled = !uiState.isBusy,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("saf_import_img_button")
                         ) {
                             Icon(imageVector = Icons.Default.FolderOpen, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Choisir .IMG à Décompiler")
+                            Text("Choisir un fichier .img")
                         }
 
                         Button(
@@ -119,7 +115,7 @@ fun CompilerScreen(
                         ) {
                             Icon(imageVector = Icons.Default.Storage, contentDescription = null)
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Décompiler vers ROM_FORGE")
+                            Text("UNPACK")
                         }
                     }
 
@@ -129,21 +125,23 @@ fun CompilerScreen(
                             shape = RoundedCornerShape(10.dp),
                             modifier = Modifier.fillMaxWidth()
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
+                            Column(
+                                modifier = Modifier.padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
                                 Text(
-                                    text = "Image Décompilée : ${rep.fileName} [${rep.format}]",
+                                    text = "UNPACK terminé : ${rep.fileName} (${rep.format})",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                                 Text(
-                                    text = "Extraits : ${rep.extractedFilesCount} fichiers • ${rep.extractedDirsCount} dossiers • ${rep.extractedSymlinksCount} symlinks (${rep.extractedSizeMb} MB)",
+                                    text = "${rep.extractedFilesCount} fichiers • ${rep.extractedDirsCount} dossiers • ${rep.extractedSymlinksCount} liens (${rep.extractedSizeMb} MB)",
                                     style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.SemiBold,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                                 Text(
-                                    text = "Sortie : ${rep.mountPointUsed}",
+                                    text = "Dossier : sdcard/FORGER/UNPACK/${uiState.selectedDecompiledImgName}",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontFamily = FontFamily.Monospace,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
@@ -155,19 +153,19 @@ fun CompilerScreen(
             }
         }
 
-        // Selector for which decompiled IMG folder to audit & recompile
+        // 2. Folder Selector inside sdcard/FORGER/UNPACK
         item {
             DecompiledImgTargetSelectorCard(
-                title = "2. Dossier IMG Décompilé à Recompiler :",
+                title = "2. Dossier sélectionné dans sdcard/FORGER/UNPACK :",
                 availableFolders = uiState.availableDecompiledImgs,
                 selectedFolderName = uiState.selectedDecompiledImgName,
-                selectedFullPath = uiState.selectedDecompiledImgFullPath,
+                selectedFullPath = "sdcard/FORGER/UNPACK/${uiState.selectedDecompiledImgName}",
                 onSelectFolder = onSelectDecompiledImg,
                 onPickExternalSafTree = onPickCustomSafTree
             )
         }
 
-        // Orchestrateur de Compilation EXT4 / EROFS + AVB 2.0
+        // 3. Single Simple REPACK -> sdcard/FORGER/PACKED
         item {
             ElevatedCard(modifier = Modifier.fillMaxWidth()) {
                 Column(
@@ -178,138 +176,38 @@ fun CompilerScreen(
                         Icon(
                             imageVector = Icons.Default.Build,
                             contentDescription = null,
-                            tint = MaterialTheme.colorScheme.secondary
+                            tint = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.width(8.dp))
                         Column {
                             Text(
-                                text = "3. REPACKER UKA PUR (.IMG FIDÈLE À L'ORIGINAL SANS RE-SIGNER LES APKS) -> ROM_FORGE/PACKED",
-                                style = MaterialTheme.typography.titleSmall,
-                                fontWeight = FontWeight.ExtraBold
+                                text = "3. REPACK Simple",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Reconstruit 'UNPACK/${uiState.selectedDecompiledImgName}' fidèlement à l'original (même format EXT4/EROFS, même point de montage, mêmes signatures APK d'origine intactes)",
+                                text = "Reconstruit le dossier sélectionné en fichier .img dans sdcard/FORGER/PACKED/",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                     }
 
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    Button(
+                        onClick = onRepackSimple1To1,
+                        enabled = !uiState.isBusy,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(54.dp)
+                            .testTag("repack_simple_1to1_button")
                     ) {
-                        FilesystemFormat.entries.forEach { fmt ->
-                            FilterChip(
-                                selected = uiState.selectedFsFormat == fmt,
-                                onClick = {
-                                    onUpdateOptions(
-                                        fmt,
-                                        uiState.enableDmVerity,
-                                        uiState.disableVerityFlagsInVbmeta
-                                    )
-                                },
-                                label = { Text(fmt.name) },
-                                modifier = Modifier.testTag("fs_format_chip_${fmt.name}")
-                            )
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Injecter le Hashtree Footer dm-verity (avbtool)",
-                                style = MaterialTheme.typography.bodyMedium,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Signe l'arbre SHA-256 avec la clé RSA-2048 platform",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Switch(
-                            checked = uiState.enableDmVerity,
-                            onCheckedChange = {
-                                onUpdateOptions(
-                                    uiState.selectedFsFormat,
-                                    it,
-                                    uiState.disableVerityFlagsInVbmeta
-                                )
-                            },
-                            modifier = Modifier.testTag("dmverity_switch")
+                        Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "REPACK Simple (-> sdcard/FORGER/PACKED)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.Bold
                         )
-                    }
-
-                    // Dedicated button for 100% Identical 1:1 DSU-bootable Repack
-                    Surface(
-                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f),
-                        shape = RoundedCornerShape(10.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(12.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Text(
-                                text = "NOUVEAU : Repack Simple & Intelligent 1:1 (100% Identique au .IMG de départ • Compatible DSU Sideloader)",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.ExtraBold,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Text(
-                                text = "Reconstruit le .IMG exactement à l'identique du GSI de départ (zéro altération des signatures APK, superblock 100% conforme DSU sans SPARSE_SUPER corrompu, clone 1:1 bit-à-bit si non modifié ou patch physique In-Place des blocs 4K).",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Button(
-                                onClick = onRepackSimple1To1,
-                                enabled = !uiState.isBusy,
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .testTag("repack_simple_1to1_button")
-                            ) {
-                                Icon(imageVector = Icons.Default.CheckCircle, contentDescription = null)
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "Repack Simple & Intelligent 1:1 (Sortir le .IMG de départ)",
-                                    fontWeight = FontWeight.ExtraBold
-                                )
-                            }
-                        }
-                    }
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        FilledTonalButton(
-                            onClick = { onRunPreFlightAudit(true) },
-                            enabled = !uiState.isBusy,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("anti_bootloop_repair_button")
-                        ) {
-                            Icon(imageVector = Icons.Default.HealthAndSafety, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Anti-Bootloop")
-                        }
-
-                        Button(
-                            onClick = onCompileImages,
-                            enabled = !uiState.isBusy,
-                            modifier = Modifier
-                                .weight(1f)
-                                .testTag("compile_system_img_button")
-                        ) {
-                            Icon(imageVector = Icons.Default.Build, contentDescription = null)
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text("Compiler .IMG & VBMeta")
-                        }
                     }
 
                     uiState.lastCompilationOutput?.let { out ->
@@ -320,145 +218,22 @@ fun CompilerScreen(
                         ) {
                             Column(
                                 modifier = Modifier.padding(12.dp),
-                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
                             ) {
                                 Text(
-                                    text = "Compilation R.E.C.O.R.E Réussie (${out.format.name} en ${out.elapsedMs}ms)",
+                                    text = "REPACK terminé (${out.format.name})",
                                     style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.ExtraBold,
+                                    fontWeight = FontWeight.Bold,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
                                 Text(
-                                    text = "IMG : ${out.systemImgPath} (${out.systemImgSizeBytes / 1024} KB)\nVBMeta : ${out.vbmetaImgPath} (${out.vbmetaImgSizeBytes} B)\nRoot Digest : ${out.dmVerityRootDigest.take(24)}...",
+                                    text = "Fichier .img : ${out.systemImgPath}\nTaille : ${out.systemImgSizeBytes / 1024} KB",
                                     style = MaterialTheme.typography.labelSmall,
                                     fontFamily = FontFamily.Monospace,
                                     color = MaterialTheme.colorScheme.onSecondaryContainer
                                 )
-
-                                out.recoreRepackReport?.let { fid ->
-                                    androidx.compose.material3.HorizontalDivider(
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
-                                    )
-                                    Text(
-                                        text = "Fidélité Structurelle R.E.C.O.R.E vs Image de Base (${fid.baseArchitectureLayout} • Point de montage '${fid.baseMountPoint}')",
-                                        style = MaterialTheme.typography.labelMedium,
-                                        fontWeight = FontWeight.ExtraBold,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    Text(
-                                        text = fid.overallRiskSummary,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        color = MaterialTheme.colorScheme.onSecondaryContainer
-                                    )
-                                    fid.recoreCoherenceGuarantees.forEach { g ->
-                                        Text(
-                                            text = "✓ $g",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                                        )
-                                    }
-
-                                    if (fid.changedElements.isNotEmpty()) {
-                                        Text(
-                                            text = "Retour R.E.C.O.R.E sur les éléments modifiés (${fid.changedElements.size}) & Risques associés :",
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = FontWeight.ExtraBold,
-                                            color = MaterialTheme.colorScheme.onSecondaryContainer
-                                        )
-                                        fid.changedElements.take(20).forEach { ch ->
-                                            Surface(
-                                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.85f),
-                                                shape = RoundedCornerShape(8.dp),
-                                                modifier = Modifier.fillMaxWidth()
-                                            ) {
-                                                Column(
-                                                    modifier = Modifier.padding(10.dp),
-                                                    verticalArrangement = Arrangement.spacedBy(3.dp)
-                                                ) {
-                                                    Row(
-                                                        modifier = Modifier.fillMaxWidth(),
-                                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Text(
-                                                            text = "[${ch.changeType}] ${ch.relativePath}",
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            fontFamily = FontFamily.Monospace,
-                                                            fontWeight = FontWeight.Bold,
-                                                            color = MaterialTheme.colorScheme.primary,
-                                                            modifier = Modifier.weight(1f)
-                                                        )
-                                                        Text(
-                                                            text = ch.riskLevel,
-                                                            style = MaterialTheme.typography.labelSmall,
-                                                            fontWeight = FontWeight.ExtraBold,
-                                                            color = if (ch.riskLevel == "HIGH_BOOT_CRITICAL") MaterialTheme.colorScheme.error
-                                                            else MaterialTheme.colorScheme.secondary
-                                                        )
-                                                    }
-                                                    Text(
-                                                        text = "Catégorie : ${ch.category} • Taille : ${ch.sizeDeltaDesc}",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                    Text(
-                                                        text = "Risque impliqué : ${ch.riskExplanation}",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                    Text(
-                                                        text = "Action R.E.C.O.R.E : ${ch.recoreMitigationApplied}",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        fontWeight = FontWeight.SemiBold,
-                                                        color = MaterialTheme.colorScheme.secondary
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
                             }
                         }
-                    }
-                }
-            }
-        }
-
-        // Pre-Flight Static Analysis Checklist
-        item {
-            Text(
-                text = "Contrôles Statiques Anti-Bootloop (${uiState.selectedDecompiledImgName})",
-                style = MaterialTheme.typography.titleSmall,
-                fontWeight = FontWeight.Bold
-            )
-        }
-
-        items(uiState.preFlightItems, key = { it.checkName }) { item ->
-            ElevatedCard(modifier = Modifier.fillMaxWidth()) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(14.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Icon(
-                        imageVector = if (item.passed) Icons.Default.CheckCircle else Icons.Default.Warning,
-                        contentDescription = null,
-                        tint = if (item.passed) MaterialTheme.colorScheme.secondary else MaterialTheme.colorScheme.error,
-                        modifier = Modifier.size(24.dp)
-                    )
-                    Spacer(modifier = Modifier.width(12.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "[${item.category}] ${item.checkName}",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.Bold
-                        )
-                        Text(
-                            text = item.detail,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                 }
             }

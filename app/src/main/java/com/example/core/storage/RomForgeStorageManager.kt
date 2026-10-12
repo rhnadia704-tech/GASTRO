@@ -1,12 +1,10 @@
 package com.example.core.storage
 
-import android.content.ContentValues
 import android.content.Context
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.DocumentsContract
-import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.File
@@ -21,17 +19,13 @@ data class StorageStatus(
 
 /**
  * RomForgeStorageManager:
- * Organizes `/storage/emulated/0/ROM_FORGE/` (and `/storage/emulated/0/Download/ROM_FORGE/` in Non-Root mode)
- * into clean, structured workspace folders:
- * - `UNPACK/`    : Decompiled `.img` system/vendor/product directories (`ROM_FORGE/UNPACK/<system_name>/`)
- * - `PACKED/`    : Recompiled `.img` (EXT4/EROFS) and `vbmeta.img` files (`ROM_FORGE/PACKED/`)
- * - `KEY/`       : Generated RSA-2048 keys (`.x509.pem`, `.pk8`) + `manifest.json` ("Clé Note")
- * - `KEY/Data/`  : APK Signature Verification reports (`signature_audit_report.json` & `signature_audit_report.txt`)
- * - `PORT/`      : GSI-to-System Auto-Porter workspace, transplanted blobs, RRO overlays, FOD shims & ported `.img`
+ * Organizes `/sdcard/FORGER/` (`/storage/emulated/0/FORGER/`) into two simple directories:
+ * - `UNPACK/` : Unpacked `.img` directories (`sdcard/FORGER/UNPACK/<nom_img>/`)
+ * - `PACKED/` : Repacked `.img` files (`sdcard/FORGER/PACKED/`)
  */
 class RomForgeStorageManager(private val context: Context) {
 
-    private val prefs = context.getSharedPreferences("rom_forge_storage_prefs", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("forger_storage_prefs", Context.MODE_PRIVATE)
 
     fun hasAllFilesAccessPermission(): Boolean {
         return try {
@@ -48,11 +42,11 @@ class RomForgeStorageManager(private val context: Context) {
     fun getRomForgePublicRoot(): File {
         if (hasAllFilesAccessPermission()) {
             try {
-                val directRomForge = File(Environment.getExternalStorageDirectory(), "ROM_FORGE")
-                if (directRomForge.exists() || directRomForge.mkdirs()) {
-                    if (directRomForge.canWrite()) {
-                        ensureSubfoldersExist(directRomForge)
-                        return directRomForge
+                val directForger = File(Environment.getExternalStorageDirectory(), "FORGER")
+                if (directForger.exists() || directForger.mkdirs()) {
+                    if (directForger.canWrite()) {
+                        ensureSubfoldersExist(directForger)
+                        return directForger
                     }
                 }
             } catch (_: Exception) {
@@ -60,11 +54,11 @@ class RomForgeStorageManager(private val context: Context) {
         }
         val appExternal = context.getExternalFilesDir(null)
         if (appExternal != null) {
-            val extRoot = File(appExternal, "ROM_FORGE").apply { mkdirs() }
+            val extRoot = File(appExternal, "FORGER").apply { mkdirs() }
             ensureSubfoldersExist(extRoot)
             return extRoot
         }
-        val internalRoot = File(context.filesDir, "ROM_FORGE").apply { mkdirs() }
+        val internalRoot = File(context.filesDir, "FORGER").apply { mkdirs() }
         ensureSubfoldersExist(internalRoot)
         return internalRoot
     }
@@ -72,32 +66,25 @@ class RomForgeStorageManager(private val context: Context) {
     private fun ensureSubfoldersExist(root: File) {
         File(root, "UNPACK").mkdirs()
         File(root, "PACKED").mkdirs()
-        File(root, "KEY/Data").mkdirs()
-        File(root, "PORT").mkdirs()
-        File(root, "EXTRACT").mkdirs()
-        File(root, "CREATION").mkdirs()
     }
 
     fun getUserVisibleDisplayRoot(): String {
-        return if (hasAllFilesAccessPermission()) {
-            "/storage/emulated/0/ROM_FORGE"
-        } else {
-            "/storage/emulated/0/Download/ROM_FORGE"
-        }
+        return "/sdcard/FORGER"
     }
 
-    // 1. UNPACK folder (for decompiled .img systems)
+    // 1. UNPACK folder (sdcard/FORGER/UNPACK)
     fun getUnpackRootDir(): File {
         val unpack = File(getRomForgePublicRoot(), "UNPACK").apply { mkdirs() }
-        // Also migrate or include any legacy `decompiled_imgs` folders if present
-        val legacy = File(getRomForgePublicRoot(), "decompiled_imgs")
-        if (legacy.exists() && legacy.isDirectory) {
-            legacy.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
-                val target = File(unpack, dir.name)
-                if (!target.exists()) {
-                    try {
-                        dir.renameTo(target)
-                    } catch (_: Exception) {
+        // Also migrate any existing unpacked folders from previous ROM_FORGE/UNPACK if present
+        if (hasAllFilesAccessPermission()) {
+            runCatching {
+                val oldUnpack = File(Environment.getExternalStorageDirectory(), "ROM_FORGE/UNPACK")
+                if (oldUnpack.exists() && oldUnpack.isDirectory) {
+                    oldUnpack.listFiles()?.filter { it.isDirectory }?.forEach { dir ->
+                        val target = File(unpack, dir.name)
+                        if (!target.exists()) {
+                            dir.copyRecursively(target, overwrite = false)
+                        }
                     }
                 }
             }
@@ -109,31 +96,21 @@ class RomForgeStorageManager(private val context: Context) {
 
     fun getDefaultSystemDecompiledDir(): File = File(getUnpackRootDir(), "system_ext4").apply { mkdirs() }
 
-    fun getStockVendorDecompiledDir(): File = File(getPortWorkspaceRootDir(), "stock_vendor_ref").apply { mkdirs() }
+    fun getStockVendorDecompiledDir(): File = File(getUnpackRootDir(), "stock_vendor_ref").apply { mkdirs() }
 
-    // 2. PACKED folder (for compiled .img and vbmeta.img)
+    // 2. PACKED folder (sdcard/FORGER/PACKED)
     fun getPackedOutputImagesDir(): File = File(getRomForgePublicRoot(), "PACKED").apply { mkdirs() }
 
     fun getCompiledOutputImagesDir(): File = getPackedOutputImagesDir()
 
-    // 3. KEY and KEY/Data folders
-    fun getKeyRootDir(): File = File(getRomForgePublicRoot(), "KEY").apply { mkdirs() }
-
+    // Legacy getters mapped cleanly inside FORGER so existing helper classes compile cleanly
+    fun getKeyRootDir(): File = File(getRomForgePublicRoot(), "PACKED").apply { mkdirs() }
     fun getKeystorePublicDir(): File = getKeyRootDir()
-
-    fun getKeyDataReportsDir(): File = File(getKeyRootDir(), "Data").apply { mkdirs() }
-
-    // 4. PORT folder (for GSI porting workspace, modified files, and final ported images)
-    fun getPortWorkspaceRootDir(): File = File(getRomForgePublicRoot(), "PORT").apply { mkdirs() }
-
-    // 5. EXTRACT folder (for EXTRACTOR module -> ExtractMe phone DNA, partitions, HALs, blobs)
-    fun getExtractRootDir(): File = File(getRomForgePublicRoot(), "EXTRACT").apply { mkdirs() }
-
-    // 6. CREATION folder (for CREATION module -> GASTROengine Make IMG & Make ROM Flashable ZIP)
-    fun getCreationOutputDir(): File = File(getRomForgePublicRoot(), "CREATION").apply { mkdirs() }
-
-    // Standalone signed APKs folder inside PACKED/signed_apks
-    fun getSingleSignedApksDir(): File = File(getPackedOutputImagesDir(), "signed_apks").apply { mkdirs() }
+    fun getKeyDataReportsDir(): File = getKeyRootDir()
+    fun getPortWorkspaceRootDir(): File = getUnpackRootDir()
+    fun getExtractRootDir(): File = getUnpackRootDir()
+    fun getCreationOutputDir(): File = getPackedOutputImagesDir()
+    fun getSingleSignedApksDir(): File = getPackedOutputImagesDir()
 
     fun listDecompiledImgDirectories(): List<File> {
         val root = getUnpackRootDir()
@@ -162,8 +139,7 @@ class RomForgeStorageManager(private val context: Context) {
     }
 
     /**
-     * Mirrors a folder to `/storage/emulated/0/ROM_FORGE/<subFolderName>` (when All Files Access is granted)
-     * or `/storage/emulated/0/Download/ROM_FORGE/<subFolderName>` via MediaStore.Downloads without root.
+     * Copies unpacked folder into `/sdcard/FORGER/UNPACK/<folder>`
      */
     suspend fun mirrorDirectoryToPublicDownloadRomForge(
         sourceDir: File,
@@ -173,17 +149,16 @@ class RomForgeStorageManager(private val context: Context) {
         val normalizedSub = subFolderName
             .replace("decompiled_imgs/", "UNPACK/")
             .replace("compiled_imgs", "PACKED")
-            .replace("keystore_aosp", "KEY")
 
         if (hasAllFilesAccessPermission()) {
             try {
-                val directTarget = File(Environment.getExternalStorageDirectory(), "ROM_FORGE/$normalizedSub")
+                val directTarget = File(Environment.getExternalStorageDirectory(), "FORGER/$normalizedSub")
                 directTarget.mkdirs()
                 if (sourceDir.absolutePath != directTarget.absolutePath) {
                     sourceDir.copyRecursively(directTarget, overwrite = true)
                 }
-                onLog("[ROM_FORGE] Synchronisé dans : ${directTarget.absolutePath}")
-                return@withContext directTarget.absolutePath
+                onLog("[FORGER] Dossier enregistré dans : /sdcard/FORGER/$normalizedSub")
+                return@withContext "/sdcard/FORGER/$normalizedSub"
             } catch (_: Exception) {
             }
         }
@@ -195,34 +170,30 @@ class RomForgeStorageManager(private val context: Context) {
             } catch (_: Exception) {
             }
         }
-        onLog("[ROM_FORGE] Dossier actif dans : ${localWorkspaceTarget.absolutePath}")
+        onLog("[FORGER] Dossier disponible dans : ${localWorkspaceTarget.absolutePath}")
         localWorkspaceTarget.absolutePath
     }
 
     /**
-     * Exports a single file to `/storage/emulated/0/ROM_FORGE/<subFolder>` (with All Files Access)
-     * or the app's accessible external `ROM_FORGE/<subFolder>` workspace without triggering MediaStore SELinux audit bursts.
+     * Exports a single file to `/sdcard/FORGER/<subFolder>` (`UNPACK` or `PACKED`).
      */
     suspend fun exportSingleFileToPublicRomForge(
         sourceFile: File,
         subFolder: String,
         onLog: (String) -> Unit
     ): String = withContext(Dispatchers.IO) {
-        val normalizedSub = subFolder
-            .replace("compiled_imgs", "PACKED")
-            .replace("signed_apks", "PACKED/signed_apks")
-            .replace("keystore_aosp", "KEY")
+        val normalizedSub = if (subFolder.contains("UNPACK", true)) "UNPACK" else "PACKED"
 
         if (hasAllFilesAccessPermission()) {
             try {
-                val directFolder = File(Environment.getExternalStorageDirectory(), "ROM_FORGE/$normalizedSub")
+                val directFolder = File(Environment.getExternalStorageDirectory(), "FORGER/$normalizedSub")
                 directFolder.mkdirs()
                 val dst = File(directFolder, sourceFile.name)
                 if (sourceFile.absolutePath != dst.absolutePath) {
                     sourceFile.copyTo(dst, overwrite = true)
                 }
-                onLog("[ROM_FORGE] Fichier disponible dans : ${dst.absolutePath}")
-                return@withContext dst.absolutePath
+                onLog("[FORGER] Fichier enregistré dans : /sdcard/FORGER/$normalizedSub/${dst.name}")
+                return@withContext "/sdcard/FORGER/$normalizedSub/${dst.name}"
             } catch (_: Exception) {
             }
         }
@@ -235,7 +206,7 @@ class RomForgeStorageManager(private val context: Context) {
             } catch (_: Exception) {
             }
         }
-        onLog("[ROM_FORGE] Fichier disponible dans : ${dst.absolutePath}")
+        onLog("[FORGER] Fichier enregistré dans : ${dst.absolutePath}")
         dst.absolutePath
     }
 
@@ -251,7 +222,7 @@ class RomForgeStorageManager(private val context: Context) {
                     val rel = docId.removePrefix("primary:")
                     val realFile = File(Environment.getExternalStorageDirectory(), rel)
                     if (realFile.exists() && realFile.isDirectory) {
-                        onLog("[SAF-RESOLVER] Dossier sélectionné dans UNPACK : ${realFile.absolutePath}")
+                        onLog("[UNPACK] Dossier sélectionné : ${realFile.absolutePath}")
                         return@withContext realFile
                     }
                 }
@@ -260,7 +231,7 @@ class RomForgeStorageManager(private val context: Context) {
         }
 
         val target = File(getUnpackRootDir(), fallbackFolderName).apply { mkdirs() }
-        onLog("[SAF-RESOLVER] Dossier lié dans UNPACK : ${target.absolutePath}")
+        onLog("[UNPACK] Dossier sélectionné : ${target.absolutePath}")
         target
     }
 }

@@ -104,8 +104,8 @@ data class ActionExecutionRecord(
 )
 
 data class KitchenUiState(
-    val currentTab: KitchenTab = KitchenTab.KEY_MAKER,
-    val previousTabBeforeConsole: KitchenTab = KitchenTab.KEY_MAKER,
+    val currentTab: KitchenTab = KitchenTab.COMPILER,
+    val previousTabBeforeConsole: KitchenTab = KitchenTab.COMPILER,
     val themePreference: AppThemePreference = AppThemePreference.SYSTEM,
     val isBusy: Boolean = false,
     val activeTaskTitle: String = "",
@@ -115,12 +115,12 @@ data class KitchenUiState(
     val isRootAvailable: Boolean = false,
     val extractedBinaries: List<ExtractedBinary> = emptyList(),
     val terminalLogs: List<TerminalLogEntry> = emptyList(),
-    // Public ROM_FORGE Storage status
-    val romForgePublicPath: String = "/storage/emulated/0/ROM_FORGE",
+    // Public FORGER Storage status
+    val romForgePublicPath: String = "/sdcard/FORGER",
     val hasAllFilesAccess: Boolean = false,
     val availableDecompiledImgs: List<String> = listOf("system_ext4"),
     val selectedDecompiledImgName: String = "system_ext4",
-    val selectedDecompiledImgFullPath: String = "/storage/emulated/0/ROM_FORGE/UNPACK/system_ext4",
+    val selectedDecompiledImgFullPath: String = "/sdcard/FORGER/UNPACK/system_ext4",
     // Key Maker state
     val keyOrg: String = "LineageOS-Custom-Forge",
     val keyCommonName: String = "AOSP-Security-Chain",
@@ -280,7 +280,7 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
 
     private fun bootstrapEnvironment() {
         viewModelScope.launch {
-            _uiState.update { it.copy(isBusy = true, activeTaskTitle = "Initialisation fluide de ROM_FORGE (UNPACK, PACKED, KEY, PORT)...") }
+            _uiState.update { it.copy(isBusy = true, activeTaskTitle = "Initialisation de sdcard/FORGER (UNPACK & PACKED)...") }
             val binaries = assetBinaryManager.extractAndVerifyBinaries { appendLog(it) }
             val rootDetected = shellEngine.probeRootAccess()
             val mode = if (rootDetected) ExecutionMode.ROOT_LOOPBACK else ExecutionMode.NON_ROOT_USERSPACE
@@ -291,34 +291,6 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                 val fl = storageManager.listDecompiledImgDirectories()
                 Triple(st, fl, fl.first())
             }
-
-            val apks = signProEngine.scanSystemApks(activeDir)
-            val (macXml, cleJson) = withContext(Dispatchers.IO) {
-                signProEngine.readCurrentMacPermissionsXml(activeDir) to keyMakerEngine.readCleNoteManifestJson()
-            }
-            val preFlight = imgCompilerEngine.runPreFlightStaticAudit(
-                autoRepairBootloopRisks = false,
-                targetDecompiledDir = activeDir
-            ) { appendLog(it) }
-            val portInit = autoPorterEngine.analyzeStockAndGsiTrees(activeDir) { appendLog(it) }
-
-            val activeKeys = repository.getAllKeys()
-            val verifierSummary = crossVerifierEngine.runFullDiagnostic(activeKeys, activeDir) { appendLog(it) }
-            repository.clearAlerts()
-            verifierSummary.alerts.forEach { repository.addAlert(it) }
-
-            val recoreInit = recoreEngine.analyzeAndReconstruct(
-                unpackedRoot = activeDir,
-                activeKeys = activeKeys,
-                autoHealAndGenerateShims = false,
-                onLog = { appendLog(it) }
-            )
-            val porterPlanInit = gastroEngine.buildPorterPlanAndAlignStructure(activeDir) { appendLog(it) }
-            val jniBlobInit = gastroEngine.runJniRustBlobAndLibraryManager(
-                unpackedGsiDir = activeDir,
-                autoReconcileAndShim = false,
-                onLog = { appendLog(it) }
-            )
 
             _uiState.update {
                 it.copy(
@@ -331,21 +303,7 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                     hasAllFilesAccess = status.hasAllFilesAccess,
                     availableDecompiledImgs = folders.map { f -> f.name },
                     selectedDecompiledImgName = activeDir.name,
-                    selectedDecompiledImgFullPath = activeDir.absolutePath,
-                    scannedApks = apks,
-                    macPermissionsPreview = macXml,
-                    cleNoteJsonPreview = cleJson,
-                    preFlightItems = preFlight,
-                    portAnalysisResult = portInit,
-                    recoreBrainReport = recoreInit,
-                    gastroSubsystems = gastroEngine.getTenRustSubsystemsStatus(),
-                    isExtractReady = gastroEngine.isExtractFolderPopulated(),
-                    extractedFilesCount = gastroEngine.countExtractedFiles(),
-                    gastroPorterPlanReport = porterPlanInit,
-                    gastroJniBlobReport = jniBlobInit,
-                    isCompileTimeAiKeyEmbedded = gastroEngine.isCompileTimeGeminiKeyEmbedded(),
-                    embeddedAiKeyStatusText = gastroEngine.getEmbeddedAiKeyStatusSummary(),
-                    verificationSummary = verifierSummary
+                    selectedDecompiledImgFullPath = activeDir.absolutePath
                 )
             }
         }
@@ -1056,7 +1014,7 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
             _uiState.update {
                 it.copy(
                     isBusy = true,
-                    activeTaskTitle = "Repack Simple & Intelligent 1:1 (100% Identique au GSI de départ • DSU Ready) depuis UNPACK/${targetDir.name}...",
+                    activeTaskTitle = "REPACK Simple en cours vers sdcard/FORGER/PACKED...",
                     activeTaskProgress = 0.35f
                 )
             }
@@ -1079,13 +1037,11 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                 onLog = { appendLog(it) }
             )
 
-            val fidelity = output.recoreRepackReport
-            val modeLabel = if (fidelity?.usedExact1To1Clone == true) "Clone 1:1 Bit-à-Bit / Delta In-Place (DSU Ready)" else "Reconstruction Pure Zéro-Mutation (DSU Ready)"
             recordActionCompleted(
-                moduleLabel = "Compilator • Repack 1:1",
-                actionTitle = "Repack Simple & Intelligent 1:1 (Identique au .img de départ)",
+                moduleLabel = "REPACK",
+                actionTitle = "REPACK Simple (-> sdcard/FORGER/PACKED)",
                 targetName = targetDir.name,
-                summaryDetail = "Image: ${File(pubSystemImg).name} (${output.systemImgSizeBytes / (1024 * 1024)} MB) | Mode=$modeLabel"
+                summaryDetail = "Fichier: ${File(pubSystemImg).name} (${output.systemImgSizeBytes / (1024 * 1024)} MB)"
             )
             _uiState.update {
                 it.copy(
@@ -1283,15 +1239,12 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
             )
 
             val allFolders = storageManager.listDecompiledImgDirectories()
-            val apks = signProEngine.scanSystemApks(targetExtractDir)
-            val macXml = signProEngine.readCurrentMacPermissionsXml(targetExtractDir)
-            val portAnalysis = autoPorterEngine.analyzeStockAndGsiTrees(targetExtractDir) { appendLog(it) }
 
             recordActionCompleted(
-                moduleLabel = "Compilator",
-                actionTitle = "Unpack UKA (.img -> UNPACK)",
+                moduleLabel = "UNPACK",
+                actionTitle = "UNPACK (-> sdcard/FORGER/UNPACK)",
                 targetName = targetExtractDir.name,
-                summaryDetail = "${report.extractedFilesCount} fichiers, ${report.extractedDirsCount} dossiers, ${report.extractedSymlinksCount} symlinks extraits"
+                summaryDetail = "${report.extractedFilesCount} fichiers, ${report.extractedDirsCount} dossiers, ${report.extractedSymlinksCount} liens extraits"
             )
 
             _uiState.update {
@@ -1302,9 +1255,6 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                     availableDecompiledImgs = allFolders.map { f -> f.name },
                     selectedDecompiledImgName = targetExtractDir.name,
                     selectedDecompiledImgFullPath = targetExtractDir.absolutePath,
-                    scannedApks = apks,
-                    macPermissionsPreview = macXml,
-                    portAnalysisResult = portAnalysis,
                     lastMountedImgReport = report.copy(mountPointUsed = publicVisibleFolder)
                 )
             }
