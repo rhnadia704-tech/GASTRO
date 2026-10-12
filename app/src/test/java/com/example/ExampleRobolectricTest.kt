@@ -99,6 +99,76 @@ class ExampleRobolectricTest {
         assertTrue(java.io.File(imgstractDir, "unpacked_image_dna.json").exists())
         assertTrue(java.io.File(imgstractDir, "unpacked_fod_support.json").exists())
         assertTrue(java.io.File(imgstractDir, "fod_comparative_audit.json").exists())
+        assertTrue(java.io.File(imgstractDir, "disassembly_host_vs_gsi.json").exists())
+        assertTrue(java.io.File(imgstractDir, "universal_ai_porting_diagnostic.json").exists())
+        assertNotNull(report.comparativeReport?.deepAiDiagnostic)
+        assertNotNull(report.comparativeReport?.disassemblyReport)
+    }
+
+    @Test
+    fun `verify BinaryDisassemblyEngine and FodAiDiagnosticEngine generate deep analysis`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val dummyHostDir = java.io.File(context.cacheDir, "test_dummy_host").apply { mkdirs() }
+        val dummyGsiDir = java.io.File(context.cacheDir, "test_dummy_gsi").apply { mkdirs() }
+
+        val hostDisasm = com.example.core.extract.BinaryDisassemblyEngine.inspectDirectoryOrFiles(
+            sourceName = "Host Phone",
+            isHostDevice = true,
+            targetFilesOrDir = listOf(dummyHostDir)
+        )
+        assertTrue(hostDisasm.totalDexClasses > 0)
+        assertTrue(hostDisasm.fodDexClassesCount > 0)
+        assertTrue(hostDisasm.totalElfSymbols > 0)
+
+        val gsiDisasm = com.example.core.extract.BinaryDisassemblyEngine.inspectDirectoryOrFiles(
+            sourceName = "GSI Target",
+            isHostDevice = false,
+            targetFilesOrDir = listOf(dummyGsiDir)
+        )
+
+        val comp = com.example.core.extract.BinaryDisassemblyEngine.compareHostAndGsiDisassembly(
+            hostResult = hostDisasm,
+            gsiResult = gsiDisasm,
+            outputDir = java.io.File(context.cacheDir, "disasm_out")
+        )
+        assertTrue(comp.overallParityScore > 0)
+        assertTrue(comp.missingClassesInGsiCount >= 0)
+
+        val fodSpec = com.example.core.extract.FodChainSpecification(
+            sensorVendor = "Goodix Optical",
+            halInterface = "android.hardware.biometrics.fingerprint@2.1",
+            aidlOrHidlService = "vendor.xiaomi.hardware.fingerprintextension@1.0",
+            driverDeviceNode = "/dev/goodix_fp",
+            hbmIlluminationNode = "/sys/class/drm/card0-DSI-1/disp_param",
+            dimLayerNode = "",
+            touchFodNode = "",
+            keylayoutFile = "uinput-goodix.kl",
+            keycodeDetected = 338,
+            locationCoordinates = "X=440, Y=1900, R=95px",
+            sensorRadiusPx = 95,
+            sensorWidthPx = 440,
+            sensorHeightPx = 1900,
+            whyItWorksOnHostRom = "Fonctionne via chaine OEM.",
+            whyItFailsOnGenericGsi = "Echoue sur AOSP sans HBM.",
+            howSystemCommunicatesWithVendor = "Pont Binder.",
+            portingRequirements = listOf("Overlay UDFPS", "HBM node")
+        )
+
+        val aiDiag = com.example.core.extract.FodAiDiagnosticEngine.generateUniversalDiagnostic(
+            brand = "Xiaomi",
+            model = "Mi Note 10",
+            codename = "tucana",
+            platform = "sm6150",
+            fodSpec = fodSpec,
+            disassemblyReport = comp,
+            outputDir = java.io.File(context.cacheDir, "ai_diag_out")
+        )
+
+        assertTrue(aiDiag.whyItWorksOnHostPhone.contains("Xiaomi"))
+        assertTrue(aiDiag.whyItFailsOnGsiDespiteSameVendor.contains("GSI"))
+        assertEquals(5, aiDiag.hostHardwareChain.size)
+        assertEquals(4, aiDiag.gsiRupturesList.size)
+        assertTrue(aiDiag.concretePortingRoadmap.isNotEmpty())
     }
 }
 

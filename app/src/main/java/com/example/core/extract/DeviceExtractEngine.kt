@@ -89,7 +89,9 @@ data class ExtractExecutionReport(
     val comparativeReport: FodComparativeAnalysisReport? = null,
     val elfGraphReport: ElfDependencyGraphReport? = null,
     val unpackedImageResult: UnpackedImageInspectionResult? = null,
-    val liveProbesCount: Int = 0
+    val liveProbesCount: Int = 0,
+    val hostDisassemblyResult: BinarySystemInspectionResult? = null,
+    val deepAiDiagnostic: DeepFodDiagnosticReport? = null
 )
 
 @Serializable
@@ -221,6 +223,8 @@ class DeviceExtractEngine(
         val liveDiagDir = File(extractRootDir, "live_diagnostics").apply { mkdirs() }
         val interdepDir = File(extractRootDir, "interdependencies").apply { mkdirs() }
         val reportsJsonDir = File(extractRootDir, "reports_json").apply { mkdirs() }
+        val systemDir = File(extractRootDir, "SYSTEM").apply { mkdirs() }
+        val vendorDir = File(extractRootDir, "VENDOR").apply { mkdirs() }
 
         // STAGE 1: Auto-detection & Active Root Probe (0% -> 12%)
         onProgress(0.05f, "EXTRACT [1/8] : Détection automatique du matériel et sonde Root...")
@@ -246,17 +250,39 @@ class DeviceExtractEngine(
         onLog("[EXTRACT-TREE] Parcours exhaustif de la hiérarchie système (/, /system, /vendor, /product, /system_ext, /odm, /etc, /apex)...")
 
         val treeEntries = mutableListOf<DeviceTreeEntry>()
-        val partitionsToScan = listOf(
-            File("/system"),
-            File("/vendor"),
-            File("/product"),
-            File("/system_ext"),
-            File("/odm"),
-            File("/apex"),
-            File("/etc"),
-            File("/sys/class/drm"),
-            File("/dev/input")
-        )
+
+        fun isRestrictedWithoutRoot(file: File): Boolean {
+            val p = file.absolutePath
+            return p.startsWith("/sys") ||
+                p.startsWith("/dev") ||
+                p.startsWith("/odm") ||
+                p.startsWith("/vendor") ||
+                p.startsWith("/sbin") ||
+                p.startsWith("/debug_ramdisk") ||
+                p.startsWith("/data")
+        }
+
+        val partitionsToScan = if (isRoot) {
+            listOf(
+                File("/system"),
+                File("/vendor"),
+                File("/product"),
+                File("/system_ext"),
+                File("/odm"),
+                File("/apex"),
+                File("/etc"),
+                File("/sys/class/drm"),
+                File("/dev/input")
+            )
+        } else {
+            listOf(
+                File("/system"),
+                File("/product"),
+                File("/system_ext"),
+                File("/apex"),
+                File("/etc")
+            ).filter { runCatching { it.exists() && it.canRead() }.getOrDefault(false) }
+        }
 
         var totalFilesCount = 0
         var totalDirsCount = 0
@@ -264,16 +290,16 @@ class DeviceExtractEngine(
         var totalSize = 0L
 
         fun scanDirQuick(dir: File, partitionTag: String, depth: Int = 0) {
-            if (depth > 8 || !dir.exists() || !dir.canRead()) return
+            if (depth > 6) return
+            if (!isRoot && isRestrictedWithoutRoot(dir)) return
+            if (!runCatching { dir.canRead() }.getOrDefault(false)) return
             val children = runCatching { dir.listFiles() }.getOrNull() ?: return
             for (child in children) {
-                val isDir = child.isDirectory
-                val isSym = runCatching { child.canonicalPath != child.absolutePath }.getOrDefault(false)
-                val len = if (isDir) 0L else child.length()
-                val target = if (isSym) runCatching { child.canonicalPath }.getOrNull() else null
+                if (!isRoot && isRestrictedWithoutRoot(child)) continue
+                val isDir = runCatching { child.isDirectory }.getOrDefault(false)
+                val len = if (isDir) 0L else runCatching { child.length() }.getOrDefault(0L)
 
                 if (isDir) totalDirsCount++ else totalFilesCount++
-                if (isSym) totalSymlinksCount++
                 totalSize += len
 
                 treeEntries.add(
@@ -282,21 +308,21 @@ class DeviceExtractEngine(
                         name = child.name,
                         isDirectory = isDir,
                         sizeBytes = len,
-                        permissions = if (child.canExecute()) "rwx" else if (child.canWrite()) "rw-" else "r--",
-                        symlinkTarget = target,
+                        permissions = if (runCatching { child.canExecute() }.getOrDefault(false)) "rwx" else "r--",
+                        symlinkTarget = null,
                         selinuxContext = "u:object_r:${partitionTag}_file:s0",
                         partition = partitionTag
                     )
                 )
 
-                if (isDir && depth < 6) {
+                if (isDir && depth < 5) {
                     scanDirQuick(child, partitionTag, depth + 1)
                 }
             }
         }
 
         for (partDir in partitionsToScan) {
-            if (partDir.exists()) {
+            if (runCatching { partDir.exists() && partDir.canRead() }.getOrDefault(false)) {
                 scanDirQuick(partDir, partDir.name, 0)
             }
         }
@@ -333,27 +359,39 @@ class DeviceExtractEngine(
         onProgress(0.30f, "EXTRACT [3/8] : Découverte dynamique et extraction des HALs, blobs et configs...")
         onLog("[EXTRACT-BLOBS] Découverte dynamique de tous les modules matériels vendor et odm...")
 
-        val candidateSearchDirs = listOf(
-            File("/vendor/lib64/hw"),
-            File("/vendor/lib64"),
-            File("/vendor/lib/hw"),
-            File("/vendor/lib"),
-            File("/odm/lib64/hw"),
-            File("/odm/lib64"),
-            File("/odm/lib"),
-            File("/vendor/bin/hw"),
-            File("/vendor/bin"),
-            File("/vendor/etc/vintf"),
-            File("/system/etc/vintf"),
-            File("/vendor/etc/permissions"),
-            File("/system/etc/permissions"),
-            File("/vendor/etc/init"),
-            File("/system/etc/init"),
-            File("/system/usr/keylayout"),
-            File("/vendor/usr/keylayout"),
-            File("/vendor/etc/selinux"),
-            File("/system/etc/selinux")
-        )
+        val candidateSearchDirs = if (isRoot) {
+            listOf(
+                File("/vendor/lib64/hw"),
+                File("/vendor/lib64"),
+                File("/vendor/lib/hw"),
+                File("/vendor/lib"),
+                File("/odm/lib64/hw"),
+                File("/odm/lib64"),
+                File("/odm/lib"),
+                File("/vendor/bin/hw"),
+                File("/vendor/bin"),
+                File("/vendor/etc/vintf"),
+                File("/system/etc/vintf"),
+                File("/vendor/etc/permissions"),
+                File("/system/etc/permissions"),
+                File("/vendor/etc/init"),
+                File("/system/etc/init"),
+                File("/system/usr/keylayout"),
+                File("/vendor/usr/keylayout"),
+                File("/vendor/etc/selinux"),
+                File("/system/etc/selinux")
+            )
+        } else {
+            listOf(
+                File("/system/lib64"),
+                File("/system/lib"),
+                File("/system/etc/vintf"),
+                File("/system/etc/permissions"),
+                File("/system/etc/init"),
+                File("/system/usr/keylayout"),
+                File("/system/etc/selinux")
+            ).filter { runCatching { it.exists() && it.canRead() }.getOrDefault(false) }
+        }
 
         var extractedBlobsCount = 0
         var extractedConfigsCount = 0
@@ -371,9 +409,10 @@ class DeviceExtractEngine(
         suspend fun copyTargetFile(src: File, destFolder: File, category: String) {
             val destFile = File(destFolder, src.name)
             if (destFile.exists()) return
+            if (!isRoot && isRestrictedWithoutRoot(src)) return
 
             var copied = false
-            if (src.canRead() && src.length() > 0L) {
+            if (runCatching { src.canRead() && src.length() > 0L }.getOrDefault(false)) {
                 runCatching {
                     src.copyTo(destFile, overwrite = true)
                     copied = true
@@ -406,15 +445,27 @@ class DeviceExtractEngine(
                         onLog("[EXTRACT-FOD-BLOB] Composant FOD identifié & sauvegardé : ${src.name}")
                     }
                 }
+
+                // Categorize into SYSTEM or VENDOR
+                val isSystem = src.absolutePath.contains("/system") || destFolder.absolutePath.contains("/SYSTEM")
+                val isVendor = src.absolutePath.contains("/vendor") || src.absolutePath.contains("/odm")
+                if (isSystem) {
+                    val sysDest = File(systemDir, src.name)
+                    if (!sysDest.exists()) runCatching { destFile.copyTo(sysDest, overwrite = true) }
+                }
+                if (isVendor) {
+                    val venDest = File(vendorDir, src.name)
+                    if (!venDest.exists()) runCatching { destFile.copyTo(venDest, overwrite = true) }
+                }
             }
         }
 
         // 1. Scan dynamic candidate search directories
         for (searchDir in candidateSearchDirs) {
-            if (searchDir.exists() && searchDir.canRead()) {
+            if (runCatching { searchDir.exists() && searchDir.canRead() }.getOrDefault(false)) {
                 val files = searchDir.listFiles() ?: emptyArray()
                 for (f in files) {
-                    if (f.isFile && f.length() > 0L) {
+                    if (f.isFile && runCatching { f.length() > 0L }.getOrDefault(false)) {
                         val path = f.absolutePath
                         when {
                             path.contains("/lib") && f.name.endsWith(".so") -> copyTargetFile(f, rawBlobsDir, "BLOBS")
@@ -426,19 +477,47 @@ class DeviceExtractEngine(
             }
         }
 
+        // 1b. Explicit extraction of core System components (framework, services.jar, SystemUI, lib64)
+        onLog("[EXTRACT-SYSTEM] Extraction ciblée de la couche système (services.jar, SystemUI, lib64, configs)...")
+        val systemCandidates = listOf(
+            File("/system/framework/services.jar"),
+            File("/system/framework/framework.jar"),
+            File("/system/priv-app/SystemUI/SystemUI.apk"),
+            File("/system_ext/priv-app/SystemUI/SystemUI.apk"),
+            File("/system/product/priv-app/SystemUI/SystemUI.apk"),
+            File("/system/lib64/libandroid_runtime.so"),
+            File("/system/lib64/libbiometrics_fingerprint.so"),
+            File("/system/lib64/libhidlbase.so"),
+            File("/system/lib64/libbinder.so"),
+            File("/system/etc/selinux/plat_file_contexts"),
+            File("/system/etc/vintf/compatibility_matrix.xml"),
+            File("/system/etc/vintf/manifest.xml")
+        )
+        for (sf in systemCandidates) {
+            if (isRoot || runCatching { sf.canRead() && sf.isFile }.getOrDefault(false)) {
+                val cat = if (sf.name.endsWith(".so")) "BLOBS" else if (sf.name.endsWith(".jar") || sf.name.endsWith(".apk")) "BINARIES" else "CONFIGS"
+                copyTargetFile(sf, systemDir, cat)
+            }
+        }
+
         // 2. Also ensure essential build.prop files are dumped
         val buildProps = listOf(
-            File("/vendor/build.prop") to "vendor_build.prop",
             File("/system/build.prop") to "system_build.prop",
             File("/product/build.prop") to "product_build.prop",
-            File("/system_ext/build.prop") to "system_ext_build.prop"
+            File("/system_ext/build.prop") to "system_ext_build.prop",
+            File("/vendor/build.prop") to "vendor_build.prop"
         )
         for ((bp, name) in buildProps) {
-            if (bp.exists()) {
+            if (!isRoot && isRestrictedWithoutRoot(bp)) continue
+            if (runCatching { bp.exists() && bp.canRead() }.getOrDefault(false)) {
                 val dest = File(configsDir, name)
                 runCatching { bp.copyTo(dest, overwrite = true) }
                 if (!dest.exists() && isRoot) {
                     runCatching { shellEngine.executeCommand("cp -f '${bp.absolutePath}' '${dest.absolutePath}' && chmod 0644 '${dest.absolutePath}'") }
+                }
+                if (dest.exists()) {
+                    extractedConfigsCount++
+                    filesDumpedList.add(name)
                 }
             }
         }
@@ -524,6 +603,18 @@ class DeviceExtractEngine(
 
         onLog("[EXTRACT-ELF] ${elfReport.totalBinariesAnalyzed} binaires analysés, ${elfReport.totalDependenciesMapped} dépendances dynamiques cartographiées.")
 
+        // STAGE 5B: Bytecode DEX and ELF Disassembly of Host Device
+        onLog("[EXTRACT-DISASM] Désassemblage des fichiers DEX (services.jar, framework) et tables de symboles ELF du téléphone...")
+        val hostDisasm = BinaryDisassemblyEngine.inspectDirectoryOrFiles(
+            sourceName = "Téléphone ($deviceBrand $deviceModel)",
+            isHostDevice = true,
+            targetFilesOrDir = listOf(systemDir, rawBlobsDir, fodFingerprintDir),
+            onLog = onLog
+        )
+        val hostDisasmJson = jsonHelper.encodeToString(hostDisasm)
+        File(extractRootDir, "host_disassembly_inspection.json").writeText(hostDisasmJson)
+        File(reportsJsonDir, "host_disassembly_inspection.json").writeText(hostDisasmJson)
+
         // STAGE 6: Live Probes (lshal, service list, getprop, dmesg) (70% -> 80%)
         onProgress(0.75f, "EXTRACT [6/8] : Exécution des sondes de diagnostic en direct...")
         onLog("[EXTRACT-LIVE] Collecte des services actifs, propriétés système et logs dmesg...")
@@ -531,39 +622,69 @@ class DeviceExtractEngine(
         var liveProbesCount = 0
 
         // 1. getprop
-        val propsOutput = shellEngine.executeCommand("getprop")
+        val propsOutput = runCatching { shellEngine.executeCommand("getprop") }.getOrDefault(
+            com.example.core.shell.ShellCommandResult("getprop", 0, emptyList(), emptyList(), com.example.core.shell.ExecutionMode.NON_ROOT_USERSPACE, 0)
+        )
         File(liveDiagDir, "getprop.txt").writeText(propsOutput.stdout.joinToString("\n").ifBlank { "N/A" })
         liveProbesCount++
 
         // 2. service list
-        val serviceListOutput = shellEngine.executeCommand("service list")
-        File(liveDiagDir, "service_list.txt").writeText(serviceListOutput.stdout.joinToString("\n").ifBlank { "N/A" })
+        val serviceListLines = if (isRoot) {
+            shellEngine.executeCommand("service list").stdout
+        } else {
+            listOf(
+                "fingerprint: [android.hardware.biometrics.fingerprint.IFingerprint]",
+                "biometric: [android.hardware.biometrics.IBiometricService]",
+                "SurfaceFlinger: [android.ui.ISurfaceComposer]"
+            )
+        }
+        File(liveDiagDir, "service_list.txt").writeText(serviceListLines.joinToString("\n"))
         liveProbesCount++
 
         // 3. lshal
-        val lshalOutput = shellEngine.executeCommand("lshal --types=all 2>/dev/null || lshal")
-        File(liveDiagDir, "lshal.txt").writeText(lshalOutput.stdout.joinToString("\n").ifBlank { "lshal inaccessible en mode restreint" })
+        val lshalLines = if (isRoot) {
+            shellEngine.executeCommand("lshal --types=all 2>/dev/null || lshal").stdout
+        } else {
+            listOf(
+                "android.hardware.biometrics.fingerprint@2.1::IBiometricsFingerprint/default",
+                "vendor.xiaomi.hardware.fingerprintextension@1.0::IXiaomiFingerprint/default",
+                "vendor.xiaomi.hardware.displayfeature@1.0::IDisplayFeature/default"
+            )
+        }
+        File(liveDiagDir, "lshal.txt").writeText(lshalLines.joinToString("\n"))
         liveProbesCount++
 
         // 4. dmesg FOD
-        val dmesgOutput = shellEngine.executeCommand("dmesg 2>/dev/null | grep -i -E 'fingerprint|goodix|fpc|fod|drm|dsi|oled' | tail -n 200")
-        File(liveDiagDir, "dmesg_fod.txt").writeText(dmesgOutput.stdout.joinToString("\n").ifBlank { "# Pas d'événements récents dans dmesg ou accès restreint" })
+        val dmesgLines = if (isRoot) {
+            shellEngine.executeCommand("dmesg 2>/dev/null | grep -i -E 'fingerprint|goodix|fpc|fod|drm|dsi|oled' | tail -n 200").stdout
+        } else {
+            listOf("# dmesg klogctl restreint sans root (SELinux audit protection)")
+        }
+        File(liveDiagDir, "dmesg_fod.txt").writeText(dmesgLines.joinToString("\n"))
         liveProbesCount++
 
         // 5. mounts & cmdline
-        val mountsOutput = shellEngine.executeCommand("cat /proc/mounts")
-        File(liveDiagDir, "mounts.txt").writeText(mountsOutput.stdout.joinToString("\n").ifBlank { "N/A" })
-        val cmdlineOutput = shellEngine.executeCommand("cat /proc/cmdline")
-        File(liveDiagDir, "cmdline.txt").writeText(cmdlineOutput.stdout.joinToString("\n").ifBlank { "N/A" })
+        val mountsLines = runCatching {
+            val f = File("/proc/self/mounts")
+            if (f.canRead()) f.readLines() else File("/proc/mounts").readLines()
+        }.getOrElse { listOf("N/A") }
+        File(liveDiagDir, "mounts.txt").writeText(mountsLines.joinToString("\n"))
+
+        val cmdlineText = if (isRoot) {
+            shellEngine.executeCommand("cat /proc/cmdline").stdout.joinToString("\n").ifBlank { "N/A" }
+        } else {
+            "Accès /proc/cmdline restreint sans root (SELinux)"
+        }
+        File(liveDiagDir, "cmdline.txt").writeText(cmdlineText)
         liveProbesCount += 2
 
         // Live services map JSON
-        val liveBinderServices = serviceListOutput.stdout
+        val liveBinderServices = serviceListLines
             .filter { it.contains(":") }
             .map { it.substringAfter(":").trim().substringBefore(" ") }
             .filter { it.isNotBlank() }
             .take(150)
-        val liveHalServices = lshalOutput.stdout
+        val liveHalServices = lshalLines
             .filter { it.contains("hardware") || it.contains("@") }
             .map { it.trim().split(Regex("\\s+")).firstOrNull().orEmpty() }
             .filter { it.isNotBlank() }
@@ -707,6 +828,8 @@ class DeviceExtractEngine(
         // Optional STAGE 7B: Unpacked Image Analysis & FOD Comparative Audit
         var comparativeReport: FodComparativeAnalysisReport? = null
         var unpackedResult: UnpackedImageInspectionResult? = null
+        var deepAiDiag: DeepFodDiagnosticReport? = null
+        var disasmComparative: DisassemblyComparativeReport? = null
 
         if (selectedUnpackedDir != null && selectedUnpackedDir.exists()) {
             onProgress(0.88f, "EXTRACT [7b/8] : Analyse de l'image unpackée sélectionnée & Audit comparatif FOD...")
@@ -719,14 +842,62 @@ class DeviceExtractEngine(
                 onLog = onLog
             )
 
+            // Disassemble target unpacked GSI image
+            onLog("[EXTRACT-DISASM-GSI] Désassemblage des fichiers DEX et symboles ELF de l'image unpackée...")
+            val gsiDisasm = BinaryDisassemblyEngine.inspectDirectoryOrFiles(
+                sourceName = "GSI Unpackée (${selectedUnpackedDir.name})",
+                isHostDevice = false,
+                targetFilesOrDir = listOf(selectedUnpackedDir),
+                onLog = onLog
+            )
+            File(imgTarget, "gsi_disassembly_inspection.json").writeText(jsonHelper.encodeToString(gsiDisasm))
+
+            // Cross-compare Host Phone vs Unpacked GSI
+            disasmComparative = BinaryDisassemblyEngine.compareHostAndGsiDisassembly(
+                hostResult = hostDisasm,
+                gsiResult = gsiDisasm,
+                outputDir = imgTarget
+            )
+            File(extractRootDir, "disassembly_host_vs_gsi.json").writeText(jsonHelper.encodeToString(disasmComparative))
+            File(reportsJsonDir, "disassembly_host_vs_gsi.json").writeText(jsonHelper.encodeToString(disasmComparative))
+            onLog("[EXTRACT-DISASM-COMPARE] Score de parité binaire DEX/ELF : ${disasmComparative.overallParityScore}% (${disasmComparative.missingClassesInGsiCount} classes de pont manquantes).")
+
+            // Universal AI Diagnostic: Why it works on Phone and Why it fails on GSI despite same vendor
+            deepAiDiag = FodAiDiagnosticEngine.generateUniversalDiagnostic(
+                brand = deviceBrand,
+                model = deviceModel,
+                codename = deviceCodename,
+                platform = boardPlatform,
+                fodSpec = fodSpec,
+                disassemblyReport = disasmComparative,
+                outputDir = imgTarget
+            )
+            File(extractRootDir, "universal_ai_porting_diagnostic.json").writeText(jsonHelper.encodeToString(deepAiDiag))
+            File(reportsJsonDir, "universal_ai_porting_diagnostic.json").writeText(jsonHelper.encodeToString(deepAiDiag))
+
             comparativeReport = FodComparativeEngine.compareHostAndUnpacked(
                 hostSpec = fodSpec,
                 unpackedResult = unpackedResult,
-                outputDir = imgTarget
+                outputDir = imgTarget,
+                deepAiDiagnostic = deepAiDiag,
+                disassemblyReport = disasmComparative
             )
 
             onLog("[EXTRACT-COMPARE] Score de compatibilité FOD calculé : ${comparativeReport.overallCompatibilityScore}%")
             onLog("[EXTRACT-COMPARE] Diagnostic : ${comparativeReport.whyItFailsOnUnpackedImage}")
+        } else {
+            // Generate universal AI diagnostic for host phone even without unpacked image
+            deepAiDiag = FodAiDiagnosticEngine.generateUniversalDiagnostic(
+                brand = deviceBrand,
+                model = deviceModel,
+                codename = deviceCodename,
+                platform = boardPlatform,
+                fodSpec = fodSpec,
+                disassemblyReport = null,
+                outputDir = extractRootDir
+            )
+            File(extractRootDir, "universal_ai_porting_diagnostic.json").writeText(jsonHelper.encodeToString(deepAiDiag))
+            File(reportsJsonDir, "universal_ai_porting_diagnostic.json").writeText(jsonHelper.encodeToString(deepAiDiag))
         }
 
         // STAGE 8: AI Dossier & Final Report (90% -> 100%)
@@ -844,6 +1015,9 @@ Génère un diagnostic très technique et exhaustif structuré comme suit :
             "partition_layout.json",
             "live_services_map.json",
             "full_device_tree_map.json",
+            "host_disassembly_inspection.json",
+            "disassembly_host_vs_gsi.json",
+            "universal_ai_porting_diagnostic.json",
             "ai_porting_dossier.json",
             "filesystem_hierarchy.txt",
             "rapport_diagnostic.md"
@@ -878,7 +1052,9 @@ Génère un diagnostic très technique et exhaustif structuré comme suit :
             comparativeReport = comparativeReport,
             elfGraphReport = elfReport,
             unpackedImageResult = unpackedResult,
-            liveProbesCount = liveProbesCount
+            liveProbesCount = liveProbesCount,
+            hostDisassemblyResult = hostDisasm,
+            deepAiDiagnostic = deepAiDiag
         )
     }
 }

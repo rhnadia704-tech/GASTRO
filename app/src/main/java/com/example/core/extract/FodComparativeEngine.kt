@@ -37,7 +37,9 @@ data class FodComparativeAnalysisReport(
     val whyItFailsOnUnpackedImage: String,
     val differentialSummary: String,
     val diffItems: List<FodDependencyDiffItem>,
-    val portingActionPlan: List<String>
+    val portingActionPlan: List<String>,
+    val deepAiDiagnostic: DeepFodDiagnosticReport? = null,
+    val disassemblyReport: DisassemblyComparativeReport? = null
 )
 
 object FodComparativeEngine {
@@ -47,7 +49,9 @@ object FodComparativeEngine {
     fun compareHostAndUnpacked(
         hostSpec: FodChainSpecification,
         unpackedResult: UnpackedImageInspectionResult,
-        outputDir: File
+        outputDir: File,
+        deepAiDiagnostic: DeepFodDiagnosticReport? = null,
+        disassemblyReport: DisassemblyComparativeReport? = null
     ): FodComparativeAnalysisReport {
         outputDir.mkdirs()
 
@@ -160,7 +164,9 @@ object FodComparativeEngine {
                 "3. Compiler un overlay RRO UDFPS avec les dimensions exactes X=${hostSpec.sensorWidthPx}, Y=${hostSpec.sensorHeightPx}, Rayon=${hostSpec.sensorRadiusPx}px.",
                 "4. Injecter les propriétés système persistantes dans build.prop pour router les commandes d'illumination.",
                 "5. Vérifier les contextes SELinux sur le node d'illumination ${hostSpec.hbmIlluminationNode}."
-            )
+            ),
+            deepAiDiagnostic = deepAiDiagnostic,
+            disassemblyReport = disassemblyReport
         )
 
         File(outputDir, "fod_comparative_audit.json").writeText(jsonHelper.encodeToString(report))

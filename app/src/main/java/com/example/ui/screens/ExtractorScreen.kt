@@ -67,6 +67,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.KitchenUiState
+import com.example.ui.extract.FodDeepAiAutopsyView
 import com.example.ui.extract.FodVisualComparisonCard
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -360,9 +361,65 @@ fun ExtractorScreen(
             }
         }
 
-        // 3. ZONE DE SYNTHÈSE COMPARATIVE FOD (Affichée si une comparaison avec image unpackée a eu lieu)
+        // 3. ZONE DE SYNTHÈSE COMPARATIVE FOD & AUTOPSIE IA
         if (report?.comparativeReport != null) {
             FodVisualComparisonCard(report = report.comparativeReport)
+        } else if (report?.deepAiDiagnostic != null) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                shape = RoundedCornerShape(16.dp),
+                border = CardDefaults.outlinedCardBorder(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .testTag("host_deep_ai_diagnostic_card")
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(
+                                modifier = Modifier
+                                    .size(34.dp)
+                                    .clip(CircleShape)
+                                    .background(Color(0xFF00E676).copy(alpha = 0.15f)),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Psychology,
+                                    contentDescription = "Autopsie IA",
+                                    tint = Color(0xFF00E676),
+                                    modifier = Modifier.size(20.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Autopsie IA : Téléphone Hôte (Système + Vendor)",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Chaîne FOD matérielle, interactions services.jar et directives de portage GSI",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    FodDeepAiAutopsyView(aiReport = report.deepAiDiagnostic)
+                }
+            }
         }
 
         // 4. STATISTIQUES & RÉSULTAT DE L'EXTRACTION DANS SDCARD/FORGER/EXTRACT/

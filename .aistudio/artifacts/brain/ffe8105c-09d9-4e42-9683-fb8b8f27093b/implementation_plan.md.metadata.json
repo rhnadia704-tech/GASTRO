@@ -1,6 +1,6 @@
 {
-  "summary": "Plan révisé pour l'extraction exhaustive du téléphone, le sélecteur d'image unpackée (UNPACK), l'analyse comparative FOD vers FORGER/Data/IMGSTRACT, la visualisation graphique Compose des dépendances et écarts, et les diagnostics live enrichis.",
-  "updatedAt": "2026-10-12T19:58:11.828388112Z",
+  "summary": "Mise à jour du plan d'implémentation pour préserver l'intégralité des fonctionnalités actuelles d'EXTRACT tout en ajoutant l'extraction intelligente de la couche système hôte, le désassemblage binaire DEX/ELF universel (compatible tout appareil Android et toute GSI), et l'analyse IA détaillée expliquant le fonctionnement matériel/vendor et les causes d'incompatibilité avec un plan de portage générique.",
+  "updatedAt": "2026-10-12T20:50:38.369610354Z",
   "requestFeedback": true,
   "userFacing": true
 }
