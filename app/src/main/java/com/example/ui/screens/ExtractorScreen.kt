@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -19,10 +20,15 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
+import androidx.compose.material.icons.filled.ArrowDropDown
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.FolderOpen
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Smartphone
@@ -31,14 +37,25 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedCard
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -48,17 +65,25 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.ui.KitchenUiState
+import com.example.ui.extract.FodVisualComparisonCard
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ExtractorScreen(
     uiState: KitchenUiState,
+    onSelectUnpackedTarget: (String) -> Unit = {},
     onExecuteExtractAll: () -> Unit,
     onRequestRootAccess: () -> Unit,
     onNavigateToConsole: () -> Unit
 ) {
     val report = uiState.lastExtractReport
     val isBusy = uiState.isBusy
+
+    var isDropdownExpanded by remember { mutableStateOf(false) }
+    val selectedUnpackedTarget = uiState.selectedExtractUnpackedTarget
+    val availableFolders = listOf("") + uiState.availableDecompiledImgs.distinct()
 
     Column(
         modifier = Modifier
@@ -159,7 +184,7 @@ fun ExtractorScreen(
             }
         }
 
-        // 2. BOUTON PRINCIPAL D'ACTION UNIQUE : Extraire Tout
+        // 2. CONFIGURATION D'EXTRACTION & SÉLECTEUR D'IMAGE UNPACKÉE (Optionnel)
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
@@ -177,12 +202,92 @@ fun ExtractorScreen(
                 )
 
                 Text(
-                    text = "Un seul clic extrait l'arborescence complète, tous les HALs et blobs .so, la chaîne FOD matérielle (Vendor <-> System) et produit l'analyse IA avec 9 fichiers JSON dans sdcard/FORGER/EXTRACT/.",
+                    text = "Extrait l'arborescence complète, tous les HALs et blobs .so, dissèque la chaîne FOD matérielle (Vendor <-> System), cartographie les dépendances ELF, exécute les sondes live et génère 11 fichiers JSON dans sdcard/FORGER/EXTRACT/.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // Optionnel : tester / forcer l'accès root
+                // Champ de sélection d'image unpackée (Dropdown)
+                Text(
+                    text = "Comparer avec une image unpackée (Optionnel) :",
+                    style = MaterialTheme.typography.labelMedium,
+                    fontWeight = FontWeight.SemiBold
+                )
+
+                ExposedDropdownMenuBox(
+                    expanded = isDropdownExpanded,
+                    onExpandedChange = { if (!isBusy) isDropdownExpanded = it },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    OutlinedTextField(
+                        value = if (selectedUnpackedTarget.isBlank()) "Aucune (Extraction téléphone uniquement)" else selectedUnpackedTarget,
+                        onValueChange = {},
+                        readOnly = true,
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded) },
+                        leadingIcon = {
+                            Icon(
+                                imageVector = if (selectedUnpackedTarget.isBlank()) Icons.Default.Smartphone else Icons.Default.FolderOpen,
+                                contentDescription = "Dossier cible"
+                            )
+                        },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth()
+                            .testTag("unpacked_image_dropdown")
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = isDropdownExpanded,
+                        onDismissRequest = { isDropdownExpanded = false }
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Aucune (Extraction téléphone uniquement)") },
+                            leadingIcon = { Icon(Icons.Default.Smartphone, contentDescription = null) },
+                            onClick = {
+                                onSelectUnpackedTarget("")
+                                isDropdownExpanded = false
+                            }
+                        )
+                        availableFolders.filter { it.isNotBlank() }.forEach { folder ->
+                            DropdownMenuItem(
+                                text = { Text(folder) },
+                                leadingIcon = { Icon(Icons.Default.Folder, contentDescription = null) },
+                                onClick = {
+                                    onSelectUnpackedTarget(folder)
+                                    isDropdownExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (selectedUnpackedTarget.isNotBlank()) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = "Info",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "L'analyse de '$selectedUnpackedTarget' sera sauvegardée dans sdcard/FORGER/Data/IMGSTRACT/ et la Synthèse Comparative FOD s'affichera ci-dessous avec le graphique différentiel.",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+
+                // Tester les droits root
                 OutlinedButton(
                     onClick = onRequestRootAccess,
                     enabled = !isBusy,
@@ -193,7 +298,7 @@ fun ExtractorScreen(
                     Icon(imageVector = Icons.Default.Security, contentDescription = "Tester Root")
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = if (uiState.isRootAvailable) "✓ Accès Root Vérifié (${uiState.activeRootProviderLabel})"
+                        text = if (uiState.isRootAvailable) "✓ Accès Root Actif (${uiState.activeRootProviderLabel})"
                         else "Tester / Accorder les Droits Root (su)",
                         fontWeight = FontWeight.SemiBold
                     )
@@ -212,13 +317,15 @@ fun ExtractorScreen(
                         .testTag("btn_execute_extract_all")
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = "Extraire tout",
+                        imageVector = if (selectedUnpackedTarget.isNotBlank()) Icons.AutoMirrored.Filled.CompareArrows else Icons.Default.Download,
+                        contentDescription = "Action d'extraction",
                         modifier = Modifier.size(24.dp)
                     )
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = if (isBusy) "Extraction en cours..." else "Extraire tout (Système + FOD + IA)",
+                        text = if (isBusy) "Extraction et diagnostic en cours..."
+                        else if (selectedUnpackedTarget.isNotBlank()) "Extraire & Comparer FOD ('$selectedUnpackedTarget')"
+                        else "Extraire tout (Système + FOD + IA)",
                         style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold
                     )
@@ -253,13 +360,18 @@ fun ExtractorScreen(
             }
         }
 
-        // 3. STATISTIQUES & RÉSULTAT DE L'EXTRACTION DANS SDCARD/FORGER/EXTRACT/
+        // 3. ZONE DE SYNTHÈSE COMPARATIVE FOD (Affichée si une comparaison avec image unpackée a eu lieu)
+        if (report?.comparativeReport != null) {
+            FodVisualComparisonCard(report = report.comparativeReport)
+        }
+
+        // 4. STATISTIQUES & RÉSULTAT DE L'EXTRACTION DANS SDCARD/FORGER/EXTRACT/
         if (report != null) {
             Card(
                 colors = CardDefaults.cardColors(
                     containerColor = MaterialTheme.colorScheme.surface
                 ),
-                shape = RoundedCornerShape(12.dp),
+                shape = RoundedCornerShape(14.dp),
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Column(
@@ -302,7 +414,7 @@ fun ExtractorScreen(
 
                     HorizontalDivider()
 
-                    // Grille de résumé
+                    // Grille de métriques
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween
@@ -366,13 +478,13 @@ fun ExtractorScreen(
                                 )
                                 Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = "Blobs & Configurations",
+                                    text = "HALs, Blobs & Configs",
                                     style = MaterialTheme.typography.labelMedium,
                                     fontWeight = FontWeight.Bold
                                 )
                             }
                             Text(
-                                text = "${report.rawBlobsCount} blobs .so • ${report.configsCount} configs",
+                                text = "${report.rawBlobsCount} bibliothèques .so • ${report.configsCount} configs",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -406,7 +518,7 @@ fun ExtractorScreen(
                     // Dissection FOD et communication Vendor <-> System
                     Surface(
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                        shape = RoundedCornerShape(8.dp),
+                        shape = RoundedCornerShape(10.dp),
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(

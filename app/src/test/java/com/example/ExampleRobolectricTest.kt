@@ -8,6 +8,7 @@ import com.example.modules.porter.AutoPorterEngine
 import com.example.modules.signpro.SignProEngine
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -68,6 +69,36 @@ class ExampleRobolectricTest {
         assertTrue(java.io.File(testExtractDir, "fod_chain.json").exists())
         assertTrue(java.io.File(testExtractDir, "partition_layout.json").exists())
         assertTrue(java.io.File(testExtractDir, "system_vendor_bridge.json").exists())
+        assertTrue(java.io.File(testExtractDir, "elf_dependency_graph.json").exists())
+        assertTrue(java.io.File(testExtractDir, "fod_fingerprint").isDirectory)
+    }
+
+    @Test
+    fun `verify UnpackedImageInspector and FodComparativeEngine generate IMGSTRACT audit`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val unpackedDir = java.io.File(context.cacheDir, "test_unpacked_system").apply {
+            mkdirs()
+            java.io.File(this, "build.prop").writeText("ro.build.version.release=14\nro.build.version.sdk=34\n")
+        }
+        val imgstractDir = java.io.File(context.cacheDir, "test_imgstract").apply { mkdirs() }
+
+        val shell = com.example.core.shell.HybridShellEngine(context.cacheDir, context.cacheDir)
+        val engine = com.example.core.extract.DeviceExtractEngine(shell)
+        val testExtractDir = java.io.File(context.cacheDir, "test_extract_with_unpacked").apply { mkdirs() }
+
+        val report = engine.executeCompleteExtraction(
+            extractRootDir = testExtractDir,
+            selectedUnpackedDir = unpackedDir,
+            imgstractOutputDir = imgstractDir,
+            onProgress = { _, _ -> },
+            onLog = { }
+        )
+
+        assertNotNull(report.comparativeReport)
+        assertEquals("test_unpacked_system", report.comparativeReport?.unpackedImageName)
+        assertTrue(java.io.File(imgstractDir, "unpacked_image_dna.json").exists())
+        assertTrue(java.io.File(imgstractDir, "unpacked_fod_support.json").exists())
+        assertTrue(java.io.File(imgstractDir, "fod_comparative_audit.json").exists())
     }
 }
 

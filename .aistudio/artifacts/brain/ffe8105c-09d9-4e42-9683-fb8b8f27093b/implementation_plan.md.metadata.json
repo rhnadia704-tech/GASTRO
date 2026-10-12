@@ -1,6 +1,6 @@
 {
-  "summary": "Plan d'implémentation révisé pour le module EXTRACT dans FORGER :\n- Intégration de l'acquisition active de l'accès Root (Magisk, KernelSU, APatch, /system/bin/su, /system/xbin/su) avec bouton dédié et permission interactive 'Demander l'accès Root'.\n- Cartographie et extraction de l'arborescence complète du système du téléphone (full filesystem tree map) traversant /, /system, /vendor, /product, /system_ext, /odm, /etc, /apex, /sys, /proc pour alimenter la compréhension structurelle de l'IA.\n- Sauvegarde de l'arborescence complète dans 'sdcard/FORGER/EXTRACT/full_device_tree_map.json' et 'filesystem_hierarchy.txt'.\n- Détection automatique et live du matériel, SoC, SDK, Kernel et statut Root.\n- Bouton unique 'Extraire tout (Système + FOD + IA)' dans le panneau EXTRACT (accessible dans la barre latérale et la navigation principale).\n- Dump exhaustif des HALs, blobs .so, VINTF, SELinux, keylayouts, scripts init et services Binder.\n- Diagnostic en profondeur de la chaîne FOD matérielle et de la communication Vendor <-> System.\n- Génération de 9 fichiers JSON hautement structurés pour l'analyse IA et les futurs portages.\n- Diagnostic IA hybride détaillé retranscrit pas-à-pas dans le Journal et exporté en fichiers réutilisables.",
-  "updatedAt": "2026-10-12T19:05:08.764017364Z",
+  "summary": "Plan révisé pour l'extraction exhaustive du téléphone, le sélecteur d'image unpackée (UNPACK), l'analyse comparative FOD vers FORGER/Data/IMGSTRACT, la visualisation graphique Compose des dépendances et écarts, et les diagnostics live enrichis.",
+  "updatedAt": "2026-10-12T19:58:11.828388112Z",
   "requestFeedback": true,
   "userFacing": true
 }

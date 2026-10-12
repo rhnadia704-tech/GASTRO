@@ -178,7 +178,8 @@ data class KitchenUiState(
     // Generated Technical Manual & AI Audit PDF
     val lastGeneratedPdfDoc: GeneratedPdfDocResult? = null,
     // Exhaustive EXTRACT state
-    val lastExtractReport: com.example.core.extract.ExtractExecutionReport? = null
+    val lastExtractReport: com.example.core.extract.ExtractExecutionReport? = null,
+    val selectedExtractUnpackedTarget: String = ""
 )
 
 class RomKitchenViewModel(application: Application) : AndroidViewModel(application) {
@@ -1741,33 +1742,57 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun selectExtractUnpackedTarget(targetName: String) {
+        _uiState.update { it.copy(selectedExtractUnpackedTarget = targetName) }
+    }
+
     fun executeFullDeviceExtractAndAiDiagnostic() {
         viewModelScope.launch {
+            val selectedFolder = _uiState.value.selectedExtractUnpackedTarget
+            val hasUnpackedTarget = selectedFolder.isNotBlank() && selectedFolder != "none"
+            val unpackedDir = if (hasUnpackedTarget) {
+                File(storageManager.getUnpackRootDir(), selectedFolder)
+            } else null
+            val imgstractDir = storageManager.getImgstractRootDir()
+
             _uiState.update {
                 it.copy(
                     isBusy = true,
-                    activeTaskTitle = "EXTRACT • Extraction complète du téléphone (Système, Arborescence, FOD & IA)...",
+                    activeTaskTitle = if (hasUnpackedTarget) "EXTRACT • Téléphone + Audit FOD sur '$selectedFolder'..."
+                    else "EXTRACT • Extraction complète du téléphone (Système, Arborescence, FOD & IA)...",
                     activeTaskProgress = 0.05f
                 )
             }
             appendLog("==========================================================================")
             appendLog("[EXTRACT-GLOBAL] Lancement de l'extraction exhaustive du téléphone...")
-            appendLog("[EXTRACT-GLOBAL] Destination : ${storageManager.getExtractRootDir().absolutePath}")
+            appendLog("[EXTRACT-GLOBAL] Destination Téléphone : ${storageManager.getExtractRootDir().absolutePath}")
+            if (hasUnpackedTarget) {
+                appendLog("[EXTRACT-GLOBAL] Image Unpackée ciblée : ${unpackedDir?.absolutePath}")
+                appendLog("[EXTRACT-GLOBAL] Destination IMGSTRACT : ${imgstractDir.absolutePath}")
+            }
             appendLog("==========================================================================")
 
             val report = deviceExtractEngine.executeCompleteExtraction(
                 extractRootDir = storageManager.getExtractRootDir(),
+                selectedUnpackedDir = unpackedDir,
+                imgstractOutputDir = imgstractDir,
                 onProgress = { p, title ->
                     _uiState.update { it.copy(activeTaskProgress = p, activeTaskTitle = title) }
                 },
                 onLog = { appendLog(it) }
             )
 
+            val summaryMsg = if (report.comparativeReport != null) {
+                "${report.rawBlobsCount} blobs .so, ${report.treeNodesScannedCount} nœuds | Audit comparatif FOD '${report.comparativeReport.unpackedImageName}' (${report.comparativeReport.overallCompatibilityScore}%) dans FORGER/Data/IMGSTRACT"
+            } else {
+                "${report.rawBlobsCount} blobs .so, ${report.treeNodesScannedCount} nœuds dans l'arborescence, 11 JSON générés dans sdcard/FORGER/EXTRACT/"
+            }
+
             recordActionCompleted(
                 moduleLabel = "EXTRACT",
-                actionTitle = "Extraction Système + Arborescence + FOD + IA",
+                actionTitle = if (hasUnpackedTarget) "Extraction Système + Audit FOD '$selectedFolder'" else "Extraction Système + Arborescence + FOD + IA",
                 targetName = "${report.deviceBrand} ${report.deviceModel}",
-                summaryDetail = "${report.rawBlobsCount} blobs .so, ${report.treeNodesScannedCount} nœuds dans l'arborescence, 9 JSON générés dans sdcard/FORGER/EXTRACT/"
+                summaryDetail = summaryMsg
             )
 
             _uiState.update {

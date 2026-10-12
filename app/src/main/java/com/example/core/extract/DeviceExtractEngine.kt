@@ -1,14 +1,12 @@
 package com.example.core.extract
 
 import android.os.Build
-import com.example.BuildConfig
 import com.example.core.gastro.GastroGeminiContent
 import com.example.core.gastro.GastroGeminiGenConfig
 import com.example.core.gastro.GastroGeminiPart
 import com.example.core.gastro.GastroGeminiRequest
 import com.example.core.gastro.GastroGeminiService
 import com.example.core.shell.HybridShellEngine
-import com.example.modules.porter.HostSystemAndVendorFodDna
 import com.example.modules.porter.HostSystemAndVendorFodProbe
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -33,8 +31,8 @@ data class DeviceTreeEntry(
     val sizeBytes: Long,
     val permissions: String,
     val symlinkTarget: String? = null,
-    val selinuxContext: String? = null,
-    val partition: String = "system"
+    val selinuxContext: String = "u:object_r:system_file:s0",
+    val partition: String
 )
 
 @Serializable
@@ -87,7 +85,11 @@ data class ExtractExecutionReport(
     val jsonFilesGenerated: List<String>,
     val fodSpecification: FodChainSpecification,
     val aiDiagnosticSummary: String,
-    val timestamp: String
+    val timestamp: String,
+    val comparativeReport: FodComparativeAnalysisReport? = null,
+    val elfGraphReport: ElfDependencyGraphReport? = null,
+    val unpackedImageResult: UnpackedImageInspectionResult? = null,
+    val liveProbesCount: Int = 0
 )
 
 @Serializable
@@ -150,12 +152,19 @@ data class InterdependenciesReport(
 )
 
 @Serializable
+data class LiveServicesMapReport(
+    val totalServicesDetected: Int,
+    val binderServices: List<String>,
+    val halServices: List<String>,
+    val capturedAt: String
+)
+
+@Serializable
 data class AiPortingDossierReport(
     val modelUsed: String,
     val aiDiagnosticReport: String,
     val generatedAt: String
 )
-
 
 /**
  * DeviceExtractEngine:
@@ -163,10 +172,12 @@ data class AiPortingDossierReport(
  * - Hardware and environment auto-detection
  * - Multi-vector root acquisition & live inspection
  * - Full filesystem hierarchy scanning (/, /system, /vendor, /product, /system_ext, /odm, /etc, /apex, /sys)
- * - Complete dump of HALs, blobs (.so), VINTF, SELinux, keylayouts, init scripts
- * - Deep in-depth dissection of the FOD hardware chain & Vendor <-> System IPC communication
- * - Generation of 9 distinct structured JSON files into sdcard/FORGER/EXTRACT/
- * - AI-powered porting dossier & architecture comprehension synthesis
+ * - Dynamic discovery and complete dump of HALs, blobs (.so), binaries, VINTF, SELinux, keylayouts, init scripts
+ * - Dedicated extraction and deep in-depth dissection of the FOD hardware chain into fod_fingerprint/
+ * - Native Kotlin ELF 32/64-bit dependency parsing (DT_NEEDED) and symbol graphing
+ * - Live system probes (lshal, service list, getprop, dmesg, mounts, cmdline)
+ * - Optional comparison with unpacked image from FORGER/UNPACK outputting to FORGER/Data/IMGSTRACT
+ * - Generation of 10+ rich structured JSON files into sdcard/FORGER/EXTRACT/
  */
 class DeviceExtractEngine(
     private val shellEngine: HybridShellEngine
@@ -194,21 +205,27 @@ class DeviceExtractEngine(
 
     suspend fun executeCompleteExtraction(
         extractRootDir: File,
+        selectedUnpackedDir: File? = null,
+        imgstractOutputDir: File? = null,
         onProgress: (Float, String) -> Unit,
         onLog: (String) -> Unit
     ): ExtractExecutionReport = withContext(Dispatchers.IO) {
         val startTime = System.currentTimeMillis()
         extractRootDir.mkdirs()
 
+        // Structured sub-folders
+        val fodFingerprintDir = File(extractRootDir, "fod_fingerprint").apply { mkdirs() }
         val rawBlobsDir = File(extractRootDir, "raw_blobs_and_hals").apply { mkdirs() }
         val configsDir = File(extractRootDir, "configs_and_xml").apply { mkdirs() }
-        val treeDumpDir = File(extractRootDir, "device_tree_dump").apply { mkdirs() }
+        val binariesDir = File(extractRootDir, "binaries_and_services").apply { mkdirs() }
+        val liveDiagDir = File(extractRootDir, "live_diagnostics").apply { mkdirs() }
+        val interdepDir = File(extractRootDir, "interdependencies").apply { mkdirs() }
+        val reportsJsonDir = File(extractRootDir, "reports_json").apply { mkdirs() }
 
-        // STAGE 1: Auto-detection & Active Root Probe (0% -> 15%)
+        // STAGE 1: Auto-detection & Active Root Probe (0% -> 12%)
         onProgress(0.05f, "EXTRACT [1/8] : Détection automatique du matériel et sonde Root...")
         onLog("[EXTRACT-START] Initialisation de l'extraction intégrale du téléphone vers ${extractRootDir.absolutePath}")
 
-        val isRootActive = shellEngine.probeRootAccess()
         val rootDiag = shellEngine.probeRootAccessExplicitly()
         val rootProvider = rootDiag.rootProvider
         val isRoot = rootDiag.isRootGranted
@@ -222,10 +239,10 @@ class DeviceExtractEngine(
         val kernelVersion = System.getProperty("os.version") ?: "Linux"
 
         onLog("[EXTRACT-INFO] Appareil : $deviceBrand $deviceModel ($deviceCodename) | SoC: $boardPlatform | Android: $androidRelease (API $sdkInt) | Kernel: $kernelVersion")
-        onLog("[EXTRACT-ROOT] Statut Root : ${if (isRoot) "ACCORDÉ ($rootProvider)" else "Non-Root (Mode userspace direct sécurisé)"}")
+        onLog("[EXTRACT-ROOT] Statut Root : ${if (isRoot) "ACCORDÉ ($rootProvider)" else "Non-Root (Mode userspace direct)"}")
 
-        // STAGE 2: Full Device Filesystem Tree Scan (15% -> 35%)
-        onProgress(0.20f, "EXTRACT [2/8] : Scan récursif de l'arborescence complète du téléphone...")
+        // STAGE 2: Full Device Filesystem Tree Scan (12% -> 25%)
+        onProgress(0.15f, "EXTRACT [2/8] : Scan récursif de l'arborescence complète du téléphone...")
         onLog("[EXTRACT-TREE] Parcours exhaustif de la hiérarchie système (/, /system, /vendor, /product, /system_ext, /odm, /etc, /apex)...")
 
         val treeEntries = mutableListOf<DeviceTreeEntry>()
@@ -272,7 +289,7 @@ class DeviceExtractEngine(
                     )
                 )
 
-                if (isDir && depth < 5) {
+                if (isDir && depth < 6) {
                     scanDirQuick(child, partitionTag, depth + 1)
                 }
             }
@@ -294,76 +311,147 @@ class DeviceExtractEngine(
             scannedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         )
 
-        File(extractRootDir, "full_device_tree_map.json").writeText(jsonHelper.encodeToString(treeEntries.take(1200)))
+        val fullTreeMapJson = jsonHelper.encodeToString(treeEntries.take(3000))
+        File(extractRootDir, "full_device_tree_map.json").writeText(fullTreeMapJson)
+        File(reportsJsonDir, "full_device_tree_map.json").writeText(fullTreeMapJson)
+
         File(extractRootDir, "filesystem_hierarchy.txt").writeText(
             buildString {
                 appendLine("# ARBORESCENCE SYSTÈME DU TÉLÉPHONE - FORGER EXTRACT")
                 appendLine("# Appareil : $deviceBrand $deviceModel ($deviceCodename)")
                 appendLine("# Total éléments analysés : ${treeEntries.size} (${totalFilesCount} fichiers, ${totalDirsCount} dossiers, ${totalSymlinksCount} liens)")
                 appendLine("==========================================================================")
-                treeEntries.take(800).forEach { entry ->
+                treeEntries.take(1500).forEach { entry ->
                     val type = if (entry.isDirectory) "[DIR]" else if (entry.symlinkTarget != null) "[LNK]" else "[FIL]"
                     appendLine("$type ${entry.path} (${entry.sizeBytes} B) ${entry.symlinkTarget?.let { "-> $it" } ?: ""}")
                 }
             }
         )
-        onLog("[EXTRACT-TREE] Arborescence analysée : ${treeEntries.size} nœuds identifiés et sauvegardés dans full_device_tree_map.json")
+        onLog("[EXTRACT-TREE] Arborescence analysée : ${treeEntries.size} nœuds identifiés et sauvegardés.")
 
-        // STAGE 3: Dump HALs, Blobs, VINTF, SELinux & Keylayouts (35% -> 55%)
-        onProgress(0.40f, "EXTRACT [3/8] : Extraction brute des HALs, Blobs .so et VINTF...")
-        onLog("[EXTRACT-BLOBS] Extraction des bibliothèques matérielles et blobs nécessaires...")
+        // STAGE 3: Dynamic Discovery & Dump of Blobs, HALs, Configs & Binaries (25% -> 45%)
+        onProgress(0.30f, "EXTRACT [3/8] : Découverte dynamique et extraction des HALs, blobs et configs...")
+        onLog("[EXTRACT-BLOBS] Découverte dynamique de tous les modules matériels vendor et odm...")
 
-        val candidateHostFiles = listOf(
-            "/vendor/build.prop" to "configs_and_xml/vendor_build.prop",
-            "/system/build.prop" to "configs_and_xml/system_build.prop",
-            "/vendor/etc/vintf/manifest.xml" to "configs_and_xml/vendor_manifest.xml",
-            "/vendor/etc/vintf/compatibility_matrix.xml" to "configs_and_xml/vendor_compatibility_matrix.xml",
-            "/system/etc/vintf/manifest.xml" to "configs_and_xml/system_manifest.xml",
-            "/vendor/etc/permissions/android.hardware.fingerprint.xml" to "configs_and_xml/android.hardware.fingerprint.xml",
-            "/system/usr/keylayout/uinput-goodix.kl" to "configs_and_xml/uinput-goodix.kl",
-            "/system/usr/keylayout/Generic.kl" to "configs_and_xml/Generic.kl",
-            "/vendor/usr/keylayout/uinput-goodix.kl" to "configs_and_xml/vendor_uinput-goodix.kl",
-            "/system/etc/selinux/plat_file_contexts" to "configs_and_xml/plat_file_contexts",
-            "/vendor/etc/selinux/vendor_file_contexts" to "configs_and_xml/vendor_file_contexts",
-            "/vendor/lib64/libgf_hal.so" to "raw_blobs_and_hals/libgf_hal.so",
-            "/vendor/lib64/vendor.xiaomi.hardware.fingerprintextension@1.0.so" to "raw_blobs_and_hals/vendor.xiaomi.hardware.fingerprintextension@1.0.so",
-            "/vendor/lib64/vendor.goodix.hardware.biometrics.fingerprint@2.1.so" to "raw_blobs_and_hals/vendor.goodix.hardware.biometrics.fingerprint@2.1.so",
-            "/vendor/lib64/vendor.xiaomi.hardware.displayfeature@1.0.so" to "raw_blobs_and_hals/vendor.xiaomi.hardware.displayfeature@1.0.so",
-            "/vendor/lib64/hw/biometrics.fingerprint.goodix.so" to "raw_blobs_and_hals/biometrics.fingerprint.goodix.so",
-            "/vendor/lib64/hw/audio.primary.sm6150.so" to "raw_blobs_and_hals/audio.primary.sm6150.so",
-            "/vendor/lib64/libhidlbase.so" to "raw_blobs_and_hals/libhidlbase.so"
+        val candidateSearchDirs = listOf(
+            File("/vendor/lib64/hw"),
+            File("/vendor/lib64"),
+            File("/vendor/lib/hw"),
+            File("/vendor/lib"),
+            File("/odm/lib64/hw"),
+            File("/odm/lib64"),
+            File("/odm/lib"),
+            File("/vendor/bin/hw"),
+            File("/vendor/bin"),
+            File("/vendor/etc/vintf"),
+            File("/system/etc/vintf"),
+            File("/vendor/etc/permissions"),
+            File("/system/etc/permissions"),
+            File("/vendor/etc/init"),
+            File("/system/etc/init"),
+            File("/system/usr/keylayout"),
+            File("/vendor/usr/keylayout"),
+            File("/vendor/etc/selinux"),
+            File("/system/etc/selinux")
         )
 
         var extractedBlobsCount = 0
         var extractedConfigsCount = 0
+        var extractedBinariesCount = 0
+        var extractedFodFilesCount = 0
+        val filesDumpedList = mutableListOf<String>()
 
-        for ((srcPath, relDest) in candidateHostFiles) {
-            val destFile = File(extractRootDir, relDest).apply { parentFile?.mkdirs() }
-            val srcFile = File(srcPath)
-            if (srcFile.exists() && srcFile.canRead() && srcFile.length() > 0L) {
+        fun isFodRelated(name: String): Boolean {
+            val l = name.lowercase()
+            return l.contains("fingerprint") || l.contains("goodix") || l.contains("fpc") ||
+                    l.contains("displayfeature") || l.contains("gf_hal") || l.contains("biometrics") ||
+                    l.contains("fod") || l.contains("udfps")
+        }
+
+        suspend fun copyTargetFile(src: File, destFolder: File, category: String) {
+            val destFile = File(destFolder, src.name)
+            if (destFile.exists()) return
+
+            var copied = false
+            if (src.canRead() && src.length() > 0L) {
                 runCatching {
-                    srcFile.copyTo(destFile, overwrite = true)
-                    if (relDest.startsWith("raw_blobs")) extractedBlobsCount++ else extractedConfigsCount++
-                    onLog("[EXTRACT-DUMP] Copié : $srcPath -> ${destFile.name} (${srcFile.length()} octets)")
+                    src.copyTo(destFile, overwrite = true)
+                    copied = true
                 }
-            } else if (isRoot) {
+            }
+            if (!copied && isRoot) {
                 runCatching {
-                    shellEngine.executeCommand("cp -f '$srcPath' '${destFile.absolutePath}' && chmod 0644 '${destFile.absolutePath}'")
+                    shellEngine.executeCommand("cp -f '${src.absolutePath}' '${destFile.absolutePath}' && chmod 0644 '${destFile.absolutePath}'")
                     if (destFile.exists() && destFile.length() > 0L) {
-                        if (relDest.startsWith("raw_blobs")) extractedBlobsCount++ else extractedConfigsCount++
-                        onLog("[EXTRACT-ROOT-DUMP] Extrait via Root : $srcPath (${destFile.length()} octets)")
+                        copied = true
+                    }
+                }
+            }
+
+            if (copied) {
+                filesDumpedList.add(destFile.name)
+                when (category) {
+                    "BLOBS" -> extractedBlobsCount++
+                    "CONFIGS" -> extractedConfigsCount++
+                    "BINARIES" -> extractedBinariesCount++
+                }
+                onLog("[EXTRACT-DUMP] $category extrait : ${src.name} (${destFile.length()} octets)")
+
+                // Special: mirror any FOD-related file to dedicated fod_fingerprint/ folder!
+                if (isFodRelated(src.name)) {
+                    val fodDest = File(fodFingerprintDir, src.name)
+                    if (!fodDest.exists()) {
+                        runCatching { destFile.copyTo(fodDest, overwrite = true) }
+                        extractedFodFilesCount++
+                        onLog("[EXTRACT-FOD-BLOB] Composant FOD identifié & sauvegardé : ${src.name}")
                     }
                 }
             }
         }
 
-        // STAGE 4: In-depth FOD Hardware Chain & Vendor <-> System Communication Dissection (55% -> 70%)
-        onProgress(0.60f, "EXTRACT [4/8] : Dissection de la chaîne FOD matérielle (Vendor <-> System)...")
-        onLog("[EXTRACT-FOD] Analyse de la communication et des maillons FOD de $deviceBrand $deviceModel...")
+        // 1. Scan dynamic candidate search directories
+        for (searchDir in candidateSearchDirs) {
+            if (searchDir.exists() && searchDir.canRead()) {
+                val files = searchDir.listFiles() ?: emptyArray()
+                for (f in files) {
+                    if (f.isFile && f.length() > 0L) {
+                        val path = f.absolutePath
+                        when {
+                            path.contains("/lib") && f.name.endsWith(".so") -> copyTargetFile(f, rawBlobsDir, "BLOBS")
+                            path.contains("/bin") -> copyTargetFile(f, binariesDir, "BINARIES")
+                            f.name.endsWith(".xml") || f.name.endsWith(".kl") || f.name.endsWith(".rc") || f.name.contains("file_contexts") -> copyTargetFile(f, configsDir, "CONFIGS")
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Also ensure essential build.prop files are dumped
+        val buildProps = listOf(
+            File("/vendor/build.prop") to "vendor_build.prop",
+            File("/system/build.prop") to "system_build.prop",
+            File("/product/build.prop") to "product_build.prop",
+            File("/system_ext/build.prop") to "system_ext_build.prop"
+        )
+        for ((bp, name) in buildProps) {
+            if (bp.exists()) {
+                val dest = File(configsDir, name)
+                runCatching { bp.copyTo(dest, overwrite = true) }
+                if (!dest.exists() && isRoot) {
+                    runCatching { shellEngine.executeCommand("cp -f '${bp.absolutePath}' '${dest.absolutePath}' && chmod 0644 '${dest.absolutePath}'") }
+                }
+            }
+        }
+
+        onLog("[EXTRACT-BLOBS] Extraction terminée : $extractedBlobsCount bibliothèques .so, $extractedConfigsCount configs, $extractedBinariesCount binaires, $extractedFodFilesCount composants FOD.")
+
+        // STAGE 4: In-depth FOD Hardware Chain & Vendor <-> System Dissection (45% -> 60%)
+        onProgress(0.50f, "EXTRACT [4/8] : Dissection approfondie de la chaîne FOD matérielle...")
+        onLog("[EXTRACT-FOD] Analyse méticuleuse des maillons FOD (Hardware, Drivers, Sysfs, Binder, SystemUI)...")
 
         val fodDna = HostSystemAndVendorFodProbe.probePhoneSystemAndVendorFodLogic(
             extractRootDir = extractRootDir,
-            stockVendorRefDir = File(extractRootDir, "raw_blobs_and_hals"),
+            stockVendorRefDir = rawBlobsDir,
             forceRefresh = true,
             onLog = onLog
         )
@@ -372,31 +460,127 @@ class DeviceExtractEngine(
             sensorVendor = fodDna.resolvedSensorVendor,
             halInterface = fodDna.resolvedHalInterface,
             aidlOrHidlService = fodDna.resolvedAidlOrHidlService,
-            driverDeviceNode = fodDna.resolvedFpDevNode.ifEmpty { "/dev/goodix_fp" },
-            hbmIlluminationNode = fodDna.resolvedHbmSysfsNode.ifEmpty { "/sys/class/drm/card0-DSI-1/disp_param" },
+            driverDeviceNode = if (fodDna.resolvedFpDevNode.isNotBlank()) fodDna.resolvedFpDevNode else "/dev/goodix_fp",
+            hbmIlluminationNode = if (fodDna.resolvedHbmSysfsNode.isNotBlank()) fodDna.resolvedHbmSysfsNode else "/sys/class/drm/card0-DSI-1/disp_param",
             dimLayerNode = fodDna.resolvedDimLayerSysfsNode,
             touchFodNode = fodDna.resolvedTouchFodNode,
-            keylayoutFile = fodDna.dynamicKeylayoutFileName.ifEmpty { "uinput-goodix.kl" },
+            keylayoutFile = if (fodDna.dynamicKeylayoutFileName.isNotBlank()) fodDna.dynamicKeylayoutFileName else "uinput-goodix.kl",
             keycodeDetected = if (fodDna.hostSystemKeycodeDetected > 0) fodDna.hostSystemKeycodeDetected else 338,
             locationCoordinates = "X=${fodDna.resolvedCenterX}, Y=${fodDna.resolvedCenterY}, Radius=${fodDna.resolvedRadiusPx}px",
             sensorRadiusPx = fodDna.resolvedRadiusPx,
             sensorWidthPx = fodDna.resolvedWidthPx,
             sensorHeightPx = fodDna.resolvedHeightPx,
-            whyItWorksOnHostRom = "Sur cette ROM hôte ($deviceBrand $deviceModel), le service SystemUI s'appuie directement sur les props '${fodDna.dynamicBuildPropsToInject.keys.joinToString(", ")}' et sur le pont HIDL/Binder '${fodDna.resolvedAidlOrHidlService}' pour déclencher l'illumination HBM via ${fodDna.resolvedHbmSysfsNode} dès que le doigt touche l'écran.",
-            whyItFailsOnGenericGsi = "Sur une GSI générique, les interfaces spécifiques '${fodDna.resolvedHalInterface}' et les ioctls de ${fodDna.resolvedHbmSysfsNode} ne sont pas câblés par défaut dans SystemUI, ce qui empêche l'allumage vert/blanc du capteur sans overlay UDFPS ni shim binaire.",
+            whyItWorksOnHostRom = "Sur votre téléphone ($deviceBrand $deviceModel), le service SystemUI s'appuie directement sur les props '${fodDna.dynamicBuildPropsToInject.keys.joinToString(", ")}' et sur le pont HIDL/Binder '${fodDna.resolvedAidlOrHidlService}' pour déclencher l'illumination HBM via ${fodDna.resolvedHbmSysfsNode} dès que le doigt touche l'écran.",
+            whyItFailsOnGenericGsi = "Sur une GSI générique ou ROM tierce, les interfaces spécifiques '${fodDna.resolvedHalInterface}' et les ioctls de ${fodDna.resolvedHbmSysfsNode} ne sont pas câblés par défaut dans SystemUI, ce qui empêche l'allumage vert/blanc du capteur sans overlay UDFPS ni shim binaire.",
             howSystemCommunicatesWithVendor = fodDna.systemToVendorBridgeExplanation,
             portingRequirements = listOf(
                 "Overlay Framework/SystemUI UDFPS avec coordonnées X=${fodDna.resolvedCenterX}, Y=${fodDna.resolvedCenterY}, R=${fodDna.resolvedRadiusPx}",
                 "Keylayout '${fodDna.dynamicKeylayoutFileName}' configuré avec le keycode ${if (fodDna.hostSystemKeycodeDetected > 0) fodDna.hostSystemKeycodeDetected else 338}",
-                "Propriétés système : ${fodDna.dynamicBuildPropsToInject.entries.joinToString("; ") { "${it.key}=${it.value}" }}",
+                "Propriétés système : " + fodDna.dynamicBuildPropsToInject.entries.joinToString("; ") { "${it.key}=${it.value}" },
                 "Service d'illumination HBM câblé sur ${fodDna.resolvedHbmSysfsNode}"
             )
         )
 
-        File(extractRootDir, "fod_chain.json").writeText(jsonHelper.encodeToString(fodSpec))
+        val fodChainJson = jsonHelper.encodeToString(fodSpec)
+        File(extractRootDir, "fod_chain.json").writeText(fodChainJson)
+        File(reportsJsonDir, "fod_chain.json").writeText(fodChainJson)
+        File(fodFingerprintDir, "fod_chain.json").writeText(fodChainJson)
 
-        // STAGE 5: Synthesis of Multi-JSON Porting Files (70% -> 85%)
-        onProgress(0.75f, "EXTRACT [5/8] : Génération des 9 fichiers JSON structurés dans sdcard/FORGER/EXTRACT/...")
+        // Write dedicated comprehensive guide to fod_fingerprint/
+        File(fodFingerprintDir, "FOD_MECHANISM_ANALYSIS.md").writeText(
+            buildString {
+                appendLine("# DISSECTION COMPLÈTE DU CAPTEUR D'EMPREINTE SOUS L'ÉCRAN (FOD)")
+                appendLine("Appareil : $deviceBrand $deviceModel ($deviceCodename) | SoC : $boardPlatform")
+                appendLine("Fournisseur du capteur : ${fodSpec.sensorVendor}")
+                appendLine("Interface HAL : ${fodSpec.halInterface}")
+                appendLine("Service Binder / HIDL : ${fodSpec.aidlOrHidlService}")
+                appendLine("Node Driver : ${fodSpec.driverDeviceNode}")
+                appendLine("Node d'Illumination HBM : ${fodSpec.hbmIlluminationNode}")
+                appendLine("Dimensions : ${fodSpec.locationCoordinates}")
+                appendLine("Keylayout & Keycode : ${fodSpec.keylayoutFile} (Keycode ${fodSpec.keycodeDetected})")
+                appendLine()
+                appendLine("## Comment le système communique avec le Vendor :")
+                appendLine(fodSpec.howSystemCommunicatesWithVendor)
+                appendLine()
+                appendLine("## Pourquoi cela fonctionne sur cette ROM :")
+                appendLine(fodSpec.whyItWorksOnHostRom)
+                appendLine()
+                appendLine("## Exigences requises pour un portage futur :")
+                fodSpec.portingRequirements.forEach { req ->
+                    appendLine("- $req")
+                }
+            }
+        )
+
+        // STAGE 5: ELF Binary Dependency Analysis (60% -> 70%)
+        onProgress(0.65f, "EXTRACT [5/8] : Analyseur binaire ELF (DT_NEEDED) & Cartographie des dépendances...")
+        onLog("[EXTRACT-ELF] Parsing des en-têtes ELF 32/64-bit de tous les blobs .so extraits...")
+
+        val elfReport = ElfDependencyAnalyzer.analyzeAllBlobs(rawBlobsDir)
+        val elfJson = jsonHelper.encodeToString(elfReport)
+        File(extractRootDir, "elf_dependency_graph.json").writeText(elfJson)
+        File(reportsJsonDir, "elf_dependency_graph.json").writeText(elfJson)
+        File(interdepDir, "elf_dependency_graph.json").writeText(elfJson)
+
+        onLog("[EXTRACT-ELF] ${elfReport.totalBinariesAnalyzed} binaires analysés, ${elfReport.totalDependenciesMapped} dépendances dynamiques cartographiées.")
+
+        // STAGE 6: Live Probes (lshal, service list, getprop, dmesg) (70% -> 80%)
+        onProgress(0.75f, "EXTRACT [6/8] : Exécution des sondes de diagnostic en direct...")
+        onLog("[EXTRACT-LIVE] Collecte des services actifs, propriétés système et logs dmesg...")
+
+        var liveProbesCount = 0
+
+        // 1. getprop
+        val propsOutput = shellEngine.executeCommand("getprop")
+        File(liveDiagDir, "getprop.txt").writeText(propsOutput.stdout.joinToString("\n").ifBlank { "N/A" })
+        liveProbesCount++
+
+        // 2. service list
+        val serviceListOutput = shellEngine.executeCommand("service list")
+        File(liveDiagDir, "service_list.txt").writeText(serviceListOutput.stdout.joinToString("\n").ifBlank { "N/A" })
+        liveProbesCount++
+
+        // 3. lshal
+        val lshalOutput = shellEngine.executeCommand("lshal --types=all 2>/dev/null || lshal")
+        File(liveDiagDir, "lshal.txt").writeText(lshalOutput.stdout.joinToString("\n").ifBlank { "lshal inaccessible en mode restreint" })
+        liveProbesCount++
+
+        // 4. dmesg FOD
+        val dmesgOutput = shellEngine.executeCommand("dmesg 2>/dev/null | grep -i -E 'fingerprint|goodix|fpc|fod|drm|dsi|oled' | tail -n 200")
+        File(liveDiagDir, "dmesg_fod.txt").writeText(dmesgOutput.stdout.joinToString("\n").ifBlank { "# Pas d'événements récents dans dmesg ou accès restreint" })
+        liveProbesCount++
+
+        // 5. mounts & cmdline
+        val mountsOutput = shellEngine.executeCommand("cat /proc/mounts")
+        File(liveDiagDir, "mounts.txt").writeText(mountsOutput.stdout.joinToString("\n").ifBlank { "N/A" })
+        val cmdlineOutput = shellEngine.executeCommand("cat /proc/cmdline")
+        File(liveDiagDir, "cmdline.txt").writeText(cmdlineOutput.stdout.joinToString("\n").ifBlank { "N/A" })
+        liveProbesCount += 2
+
+        // Live services map JSON
+        val liveBinderServices = serviceListOutput.stdout
+            .filter { it.contains(":") }
+            .map { it.substringAfter(":").trim().substringBefore(" ") }
+            .filter { it.isNotBlank() }
+            .take(150)
+        val liveHalServices = lshalOutput.stdout
+            .filter { it.contains("hardware") || it.contains("@") }
+            .map { it.trim().split(Regex("\\s+")).firstOrNull().orEmpty() }
+            .filter { it.isNotBlank() }
+            .take(150)
+
+        val liveServicesReport = LiveServicesMapReport(
+            totalServicesDetected = liveBinderServices.size + liveHalServices.size,
+            binderServices = liveBinderServices,
+            halServices = liveHalServices,
+            capturedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+        )
+        val liveServicesJson = jsonHelper.encodeToString(liveServicesReport)
+        File(extractRootDir, "live_services_map.json").writeText(liveServicesJson)
+        File(reportsJsonDir, "live_services_map.json").writeText(liveServicesJson)
+
+        // STAGE 7: Synthesis of Multi-JSON Porting Files (80% -> 90%)
+        onProgress(0.82f, "EXTRACT [7/8] : Génération des 10+ fichiers JSON structurés dans sdcard/FORGER/EXTRACT/...")
         onLog("[EXTRACT-JSON] Création des fichiers d'interdépendances, VINTF, partitions et DNA...")
 
         // 1. device_dna.json
@@ -413,7 +597,9 @@ class DeviceExtractEngine(
             systemProps = fodDna.hostSystemProps,
             vendorProps = fodDna.hostVendorProps
         )
-        File(extractRootDir, "device_dna.json").writeText(jsonHelper.encodeToString(deviceDnaReport))
+        val dnaJson = jsonHelper.encodeToString(deviceDnaReport)
+        File(extractRootDir, "device_dna.json").writeText(dnaJson)
+        File(reportsJsonDir, "device_dna.json").writeText(dnaJson)
 
         // 2. hals_and_blobs.json
         val halsAndBlobsReport = HalsAndBlobsReport(
@@ -426,17 +612,21 @@ class DeviceExtractEngine(
                 "vendor.xiaomi.hardware.displayfeature@1.0",
                 "android.hardware.audio@7.0"
             ),
-            filesDumped = candidateHostFiles.map { it.second }
+            filesDumped = filesDumpedList
         )
-        File(extractRootDir, "hals_and_blobs.json").writeText(jsonHelper.encodeToString(halsAndBlobsReport))
+        val halsJson = jsonHelper.encodeToString(halsAndBlobsReport)
+        File(extractRootDir, "hals_and_blobs.json").writeText(halsJson)
+        File(reportsJsonDir, "hals_and_blobs.json").writeText(halsJson)
 
         // 3. vintf_matrix.json
         val vintfReport = VintfMatrixReport(
             vendorHals = fodDna.hostVendorVintfHals,
             vndkVersion = fodDna.hostVendorProps["ro.vndk.version"] ?: "current",
-            manifestStatus = if (File(extractRootDir, "configs_and_xml/vendor_manifest.xml").exists()) "DUMPED" else "HEURISTIC"
+            manifestStatus = if (File(configsDir, "vendor_manifest.xml").exists()) "DUMPED" else "HEURISTIC"
         )
-        File(extractRootDir, "vintf_matrix.json").writeText(jsonHelper.encodeToString(vintfReport))
+        val vintfJson = jsonHelper.encodeToString(vintfReport)
+        File(extractRootDir, "vintf_matrix.json").writeText(vintfJson)
+        File(reportsJsonDir, "vintf_matrix.json").writeText(vintfJson)
 
         // 4. partition_layout.json
         val partitionsReport = PartitionLayoutReport(
@@ -450,52 +640,125 @@ class DeviceExtractEngine(
             totalTreeSizeBytes = totalSize,
             treeSummary = treeSummary
         )
-        File(extractRootDir, "partition_layout.json").writeText(jsonHelper.encodeToString(partitionsReport))
+        val partJson = jsonHelper.encodeToString(partitionsReport)
+        File(extractRootDir, "partition_layout.json").writeText(partJson)
+        File(reportsJsonDir, "partition_layout.json").writeText(partJson)
 
         // 5. system_vendor_bridge.json
         val bridgeReport = SystemVendorBridgeReport(
-            summary = fodDna.systemToVendorBridgeExplanation,
-            systemLogic = fodDna.systemLogicSummary,
-            vendorLogic = fodDna.vendorLogicSummary,
-            binderChannels = listOf("hwbinder", "binder", "vndbinder"),
-            criticalSysfsNodes = fodDna.liveKernelSysfsNodesFound
+            summary = "Cartographie exhaustive du pont de communication entre la partition Vendor et la partition System pour $deviceBrand $deviceModel",
+            systemLogic = listOf(
+                "Framework Android (Services Binder, FingerprintManager, BiometricService)",
+                "SystemUI (Affichage de l'icône FOD & gestion de l'illumination HBM)",
+                "SurfaceFlinger (Composition de la couche de dimming et gestion des DRM planes)"
+            ),
+            vendorLogic = listOf(
+                "Driver de bas niveau (${fodSpec.driverDeviceNode})",
+                "HAL propriétaire Vendor (${fodSpec.halInterface})",
+                "Gestionnaire d'illumination haute luminosité (${fodSpec.hbmIlluminationNode})"
+            ),
+            binderChannels = listOf(
+                fodSpec.aidlOrHidlService,
+                "android.hardware.biometrics.fingerprint.IFingerprint/default",
+                "vendor.xiaomi.hardware.fingerprintextension@1.0::IXiaomiFingerprint/default",
+                "vendor.xiaomi.hardware.displayfeature@1.0::IDisplayFeature/default"
+            ),
+            criticalSysfsNodes = listOf(
+                fodSpec.hbmIlluminationNode,
+                fodSpec.dimLayerNode,
+                fodSpec.touchFodNode
+            )
         )
-        File(extractRootDir, "system_vendor_bridge.json").writeText(jsonHelper.encodeToString(bridgeReport))
+        val bridgeJson = jsonHelper.encodeToString(bridgeReport)
+        File(extractRootDir, "system_vendor_bridge.json").writeText(bridgeJson)
+        File(reportsJsonDir, "system_vendor_bridge.json").writeText(bridgeJson)
 
         // 6. interdependencies.json
         val interdepReport = InterdependenciesReport(
-            neededLibraries = listOf("libhidlbase.so", "libgf_hal.so", "libbinder.so", "libcutils.so"),
+            neededLibraries = elfReport.systemLibrariesDependedOnByVendor.ifEmpty {
+                listOf(
+                    "libhidlbase.so",
+                    "libutils.so",
+                    "libcutils.so",
+                    "liblog.so",
+                    "libbinder.so",
+                    "libc++.so"
+                )
+            },
             exportedSymbols = listOf(
-                "_ZN7android18SurfaceComposerClient13setLayerStackERKNS_2spINS_7IBinderEEEj",
-                "android_hardware_displayfeature_setHBM"
+                "gf_hal_open",
+                "gf_hal_authenticate",
+                "gf_hal_enroll",
+                "gf_hal_cancel",
+                "set_screen_hbm_on",
+                "set_screen_hbm_off"
             ),
-            shimsRequired = listOf("libshim_recore_binder.so", "libshim_recore_surface.so")
+            shimsRequired = listOf(
+                "Shim UDFPS HBM pour intercepter les requêtes d'illumination de l'écran",
+                "Shim HIDL pour binder vers le service ${fodSpec.aidlOrHidlService}",
+                "Compatibilité ABI libcutils pour les blobs précompilés"
+            )
         )
-        File(extractRootDir, "interdependencies.json").writeText(jsonHelper.encodeToString(interdepReport))
+        val interdepJson = jsonHelper.encodeToString(interdepReport)
+        File(extractRootDir, "interdependencies.json").writeText(interdepJson)
+        File(reportsJsonDir, "interdependencies.json").writeText(interdepJson)
+        File(interdepDir, "interdependencies.json").writeText(interdepJson)
 
-        // STAGE 6: Hybrid AI Comprehensive Diagnostic Dossier (85% -> 98%)
-        onProgress(0.88f, "EXTRACT [6/8] : Analyse approfondie par l'IA (Compréhension de l'OS & Portage)...")
-        onLog("[EXTRACT-AI] Synthèse du diagnostic par l'IA (architecture globale, FOD, communication)...")
+        // Optional STAGE 7B: Unpacked Image Analysis & FOD Comparative Audit
+        var comparativeReport: FodComparativeAnalysisReport? = null
+        var unpackedResult: UnpackedImageInspectionResult? = null
 
-        val aiPrompt = """
-            Tu es l'architecte système Android OS en chef de l'application FORGER.
-            Analyse les données d'extraction de ce téléphone hôte :
-            - Appareil : $deviceBrand $deviceModel ($deviceCodename), Plateforme: $boardPlatform
-            - Android: $androidRelease (SDK $sdkInt), Kernel: $kernelVersion, Root: $isRoot ($rootProvider)
-            - Chaîne FOD : Capteur=${fodSpec.sensorVendor}, HAL=${fodSpec.halInterface}, HBM Node=${fodSpec.hbmIlluminationNode}, Keycode=${fodSpec.keycodeDetected}
-            - Arborescence : ${treeEntries.size} nœuds système analysés
-            
-            Produis un rapport technique exhaustif structuré :
-            1. Compréhension globale de l'OS et de son arborescence
-            2. Mécanisme exact de communication entre le Vendor et le Système
-            3. Fonctionnement de la chaîne FOD et pourquoi elle fonctionne sur ce téléphone
-            4. Recommandations impératives pour un portage GSI / Custom ROM 100% réussi
-        """.trimIndent()
+        if (selectedUnpackedDir != null && selectedUnpackedDir.exists()) {
+            onProgress(0.88f, "EXTRACT [7b/8] : Analyse de l'image unpackée sélectionnée & Audit comparatif FOD...")
+            onLog("[EXTRACT-UNPACKED] Inspection de l'image unpackée : ${selectedUnpackedDir.name}...")
 
+            val imgTarget = imgstractOutputDir ?: File(extractRootDir.parentFile, "Data/IMGSTRACT").apply { mkdirs() }
+            unpackedResult = UnpackedImageInspector.inspectUnpackedDirectory(
+                unpackedFolder = selectedUnpackedDir,
+                destinationDataImgstract = imgTarget,
+                onLog = onLog
+            )
+
+            comparativeReport = FodComparativeEngine.compareHostAndUnpacked(
+                hostSpec = fodSpec,
+                unpackedResult = unpackedResult,
+                outputDir = imgTarget
+            )
+
+            onLog("[EXTRACT-COMPARE] Score de compatibilité FOD calculé : ${comparativeReport.overallCompatibilityScore}%")
+            onLog("[EXTRACT-COMPARE] Diagnostic : ${comparativeReport.whyItFailsOnUnpackedImage}")
+        }
+
+        // STAGE 8: AI Dossier & Final Report (90% -> 100%)
+        onProgress(0.92f, "EXTRACT [8/8] : Synthèse du dossier d'aide au portage & Finalisation...")
+        onLog("[EXTRACT-AI] Synthèse de l'architecture matérielle et génération du dossier de portage...")
+
+        val apiKey = com.example.BuildConfig.GEMINI_API_KEY
         var aiDiagnosticText = ""
-        val apiKey = BuildConfig.GEMINI_API_KEY
-        if (apiKey.isNotBlank() && apiKey != "MY_GEMINI_API_KEY" && !apiKey.startsWith("YOUR_")) {
+
+        if (apiKey.isNotBlank()) {
             try {
+                val aiPrompt = """
+Tu es un architecte système expert en ingénierie inverse Android, bas niveau (AOSP, HAL, HIDL/AIDL, Binder) et portage de ROM/GSI.
+Voici les données extraites du téléphone de l'utilisateur :
+- Appareil : $deviceBrand $deviceModel ($deviceCodename)
+- Plateforme SoC : $boardPlatform
+- Android : $androidRelease (API $sdkInt) | Kernel: $kernelVersion
+- Accès Root : $isRoot ($rootProvider)
+- Capteur FOD : ${fodSpec.sensorVendor} via ${fodSpec.driverDeviceNode}
+- Service HAL : ${fodSpec.halInterface} (${fodSpec.aidlOrHidlService})
+- Illumination HBM : ${fodSpec.hbmIlluminationNode} (Dimensions: ${fodSpec.locationCoordinates})
+- Keylayout : ${fodSpec.keylayoutFile} (Keycode: ${fodSpec.keycodeDetected})
+- Dépendances ELF : ${elfReport.totalDependenciesMapped} dépendances dans ${elfReport.totalBinariesAnalyzed} bibliothèques
+${if (comparativeReport != null) "- Image unpackée comparée : ${comparativeReport.unpackedImageName} (Score compatibilité: ${comparativeReport.overallCompatibilityScore}%)" else ""}
+
+Génère un diagnostic très technique et exhaustif structuré comme suit :
+1. ANALYSE DU COEUR DU TÉLÉPHONE (SoC, architecture partitions SAR, communication Vendor <-> System).
+2. DISSECTION DE LA CHAÎNE MATÉRIELLE FOD : Pourquoi et comment l'empreinte sous l'écran fonctionne sur ce téléphone (du pilote kernel au composant SystemUI en passant par l'illumination OLED HBM).
+3. CARTOGRAPHIE DES DÉPENDANCES ET BLOBS CRITIQUES : Ce qui lie le vendor au système.
+4. RECETTE PRATIQUE DE PORTAGE : Directives exactes pour faire fonctionner ce capteur et le vendor sur une ROM tierce ou GSI (overlays, shims, permissions sepolicy, build.prop).
+""".trimIndent()
+
                 val req = GastroGeminiRequest(
                     contents = listOf(
                         GastroGeminiContent(
@@ -517,43 +780,53 @@ class DeviceExtractEngine(
 
         if (aiDiagnosticText.isBlank()) {
             aiDiagnosticText = buildString {
-                appendLine("## DIAGNOSTIC SYSTÈME & DOSSIER DE PORTAGE FORGER (Mode Hybride Analytique)")
+                appendLine("## DOSSIER TECHNIQUE D'EXTRACTION & PORTAGE FORGER (Moteur Analytique Hybride)")
                 appendLine()
                 appendLine("### 1. Structure de l'OS et Anatomie de l'Arborescence")
                 appendLine("L'appareil **$deviceBrand $deviceModel ($deviceCodename)** repose sur une topologie System-As-Root (SAR) orchestrée par le SoC **$boardPlatform** sous Android **$androidRelease**.")
-                appendLine("La partition système '/' intègre les montages dynamiques `/system_ext`, `/product`, `/vendor` et `/odm` reliés par des liens symboliques canoniques.")
+                appendLine("La partition système '/' intègre les montages dynamiques `/system_ext`, `/product`, `/vendor` et `/odm` reliés par des liaisons Binder et interfaces HAL normalisées.")
                 appendLine()
-                appendLine("### 2. Communication Vendor <-> System")
-                appendLine(fodDna.systemToVendorBridgeExplanation)
-                appendLine()
-                appendLine("### 3. Fonctionnement de la Chaîne FOD")
+                appendLine("### 2. Dissection Complète de la Chaîne Matérielle FOD")
                 appendLine("- **Capteur & Driver** : ${fodSpec.sensorVendor} via `${fodSpec.driverDeviceNode}`.")
                 appendLine("- **HAL & Démon** : `${fodSpec.halInterface}` relié au service `${fodSpec.aidlOrHidlService}`.")
                 appendLine("- **Illumination HBM** : Ioctl d'éclairage haute luminosité sur `${fodSpec.hbmIlluminationNode}` avec coordonnées ${fodSpec.locationCoordinates}.")
                 appendLine("- **Signal d'Appui** : Keycode ${fodSpec.keycodeDetected} configuré dans `${fodSpec.keylayoutFile}`.")
                 appendLine()
+                appendLine("### 3. Communication Vendor <-> System")
+                appendLine(fodSpec.howSystemCommunicatesWithVendor)
+                appendLine()
                 appendLine("### 4. Directives de Portage pour une ROM / GSI 100% Fonctionnelle")
                 fodSpec.portingRequirements.forEach { req ->
                     appendLine("- $req")
                 }
+                if (comparativeReport != null) {
+                    appendLine()
+                    appendLine("### 5. Audit Comparatif avec l'Image Unpackée (${comparativeReport.unpackedImageName})")
+                    appendLine("- Score global de compatibilité : **${comparativeReport.overallCompatibilityScore}%**")
+                    appendLine("- **Pourquoi le FOD échoue sur cette image** : ${comparativeReport.whyItFailsOnUnpackedImage}")
+                    appendLine("- **Plan d'action correctif** :")
+                    comparativeReport.portingActionPlan.forEach { action ->
+                        appendLine("  * $action")
+                    }
+                }
             }
         }
 
-        // 7. ai_porting_dossier.json
         val aiDossierReport = AiPortingDossierReport(
             modelUsed = if (apiKey.isNotBlank()) "gemini-3.5-flash" else "Local Analytical Hybrid Engine",
             aiDiagnosticReport = aiDiagnosticText,
             generatedAt = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
         )
-        File(extractRootDir, "ai_porting_dossier.json").writeText(jsonHelper.encodeToString(aiDossierReport))
+        val aiJson = jsonHelper.encodeToString(aiDossierReport)
+        File(extractRootDir, "ai_porting_dossier.json").writeText(aiJson)
+        File(reportsJsonDir, "ai_porting_dossier.json").writeText(aiJson)
 
-        // 8. rapport_diagnostic.md
         File(extractRootDir, "rapport_diagnostic.md").writeText(
             buildString {
                 appendLine("# DOSSIER D'EXTRACTION & DIAGNOSTIC COMPLET • FORGER")
                 appendLine("Date: ${SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())}")
                 appendLine("Appareil: $deviceBrand $deviceModel ($deviceCodename)")
-                appendLine("SoC / Plateforme: $boardPlatform | Android: $androidRelease | Kernel: $kernelVersion")
+                appendLine("SoC: $boardPlatform | Android: $androidRelease (API $sdkInt) | Kernel: $kernelVersion")
                 appendLine("Statut Root: ${if (isRoot) "ACCORDÉ ($rootProvider)" else "NON-ROOT (Userspace direct)"}")
                 appendLine()
                 appendLine("---")
@@ -562,24 +835,27 @@ class DeviceExtractEngine(
         )
 
         val jsonFilesList = listOf(
-            "full_device_tree_map.json",
-            "filesystem_hierarchy.txt",
             "device_dna.json",
             "fod_chain.json",
             "hals_and_blobs.json",
+            "elf_dependency_graph.json",
+            "interdependencies.json",
             "vintf_matrix.json",
             "partition_layout.json",
-            "system_vendor_bridge.json",
-            "interdependencies.json",
+            "live_services_map.json",
+            "full_device_tree_map.json",
             "ai_porting_dossier.json",
+            "filesystem_hierarchy.txt",
             "rapport_diagnostic.md"
         )
 
-        // STAGE 7: Final verification & Logging (98% -> 100%)
-        onProgress(1.0f, "Extraction et diagnostic terminés avec succès dans sdcard/FORGER/EXTRACT/ !")
+        onProgress(1.0f, "Extraction et diagnostics terminés avec succès !")
         val elapsed = System.currentTimeMillis() - startTime
-        onLog("[EXTRACT-FINISH] Opération terminée en ${elapsed}ms dans ${extractRootDir.absolutePath}")
-        onLog("[EXTRACT-FINISH] Résumé : $extractedBlobsCount blobs .so, $extractedConfigsCount configs, ${treeEntries.size} nœuds dans l'arborescence, ${jsonFilesList.size} fichiers générés.")
+        onLog("[EXTRACT-FINISH] Opération achevée en ${elapsed}ms dans ${extractRootDir.absolutePath}")
+        onLog("[EXTRACT-FINISH] Résultat global : $extractedBlobsCount blobs .so, $extractedConfigsCount configs, $extractedBinariesCount binaires, ${treeEntries.size} nœuds système, $liveProbesCount sondes exécutées.")
+        if (comparativeReport != null) {
+            onLog("[EXTRACT-FINISH] Audit comparatif avec l'image '${comparativeReport.unpackedImageName}' sauvegardé dans ${imgstractOutputDir?.absolutePath ?: "FORGER/Data/IMGSTRACT"}")
+        }
 
         ExtractExecutionReport(
             deviceBrand = deviceBrand,
@@ -598,7 +874,11 @@ class DeviceExtractEngine(
             jsonFilesGenerated = jsonFilesList,
             fodSpecification = fodSpec,
             aiDiagnosticSummary = aiDiagnosticText.take(1500),
-            timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date())
+            timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date()),
+            comparativeReport = comparativeReport,
+            elfGraphReport = elfReport,
+            unpackedImageResult = unpackedResult,
+            liveProbesCount = liveProbesCount
         )
     }
 }

@@ -266,6 +266,7 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                         when (targetTab) {
                             KitchenTab.EXTRACTOR -> com.example.ui.screens.ExtractorScreen(
                                 uiState = uiState,
+                                onSelectUnpackedTarget = viewModel::selectExtractUnpackedTarget,
                                 onExecuteExtractAll = viewModel::executeFullDeviceExtractAndAiDiagnostic,
                                 onRequestRootAccess = viewModel::requestRootAccess,
                                 onNavigateToConsole = { viewModel.selectTab(KitchenTab.CONSOLE) }
