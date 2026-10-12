@@ -22,7 +22,7 @@ class ExampleRobolectricTest {
     fun `verify app name and core AOSP reverse compiler modules`() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
-        assertEquals("GASTRO", appName)
+        assertEquals("FORGER", appName)
 
         // 1. Verify AssetBinaryManager extracts all 8 native binaries & JNI Rust libraries
         val binaryManager = AssetBinaryManager(context)
@@ -48,4 +48,26 @@ class ExampleRobolectricTest {
         assertTrue(portRes.fodDiagnostics.detected)
         assertTrue(portRes.fodDiagnostics.systemUiOverlayInjected)
     }
+
+    @Test
+    fun `verify DeviceExtractEngine json serialization succeeds without Any serializer errors`() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val shell = com.example.core.shell.HybridShellEngine(context.cacheDir, context.cacheDir)
+        val engine = com.example.core.extract.DeviceExtractEngine(shell)
+        val testExtractDir = java.io.File(context.cacheDir, "test_extract").apply { mkdirs() }
+
+        val report = engine.executeCompleteExtraction(
+            extractRootDir = testExtractDir,
+            onProgress = { _, _ -> },
+            onLog = { }
+        )
+
+        assertTrue(report.jsonFilesGenerated.isNotEmpty())
+        assertTrue(java.io.File(testExtractDir, "device_dna.json").exists())
+        assertTrue(java.io.File(testExtractDir, "hals_and_blobs.json").exists())
+        assertTrue(java.io.File(testExtractDir, "fod_chain.json").exists())
+        assertTrue(java.io.File(testExtractDir, "partition_layout.json").exists())
+        assertTrue(java.io.File(testExtractDir, "system_vendor_bridge.json").exists())
+    }
 }
+

@@ -66,6 +66,7 @@ class RomForgeStorageManager(private val context: Context) {
     private fun ensureSubfoldersExist(root: File) {
         File(root, "UNPACK").mkdirs()
         File(root, "PACKED").mkdirs()
+        File(root, "EXTRACT").mkdirs()
     }
 
     fun getUserVisibleDisplayRoot(): String {
@@ -103,12 +104,14 @@ class RomForgeStorageManager(private val context: Context) {
 
     fun getCompiledOutputImagesDir(): File = getPackedOutputImagesDir()
 
+    // 3. EXTRACT folder (sdcard/FORGER/EXTRACT)
+    fun getExtractRootDir(): File = File(getRomForgePublicRoot(), "EXTRACT").apply { mkdirs() }
+
     // Legacy getters mapped cleanly inside FORGER so existing helper classes compile cleanly
     fun getKeyRootDir(): File = File(getRomForgePublicRoot(), "PACKED").apply { mkdirs() }
     fun getKeystorePublicDir(): File = getKeyRootDir()
     fun getKeyDataReportsDir(): File = getKeyRootDir()
     fun getPortWorkspaceRootDir(): File = getUnpackRootDir()
-    fun getExtractRootDir(): File = getUnpackRootDir()
     fun getCreationOutputDir(): File = getPackedOutputImagesDir()
     fun getSingleSignedApksDir(): File = getPackedOutputImagesDir()
 

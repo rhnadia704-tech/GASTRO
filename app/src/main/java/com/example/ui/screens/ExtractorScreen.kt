@@ -1,7 +1,9 @@
 package com.example.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,16 +14,18 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountTree
-import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.FolderSpecial
-import androidx.compose.material.icons.filled.Memory
+import androidx.compose.material.icons.filled.Fingerprint
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.Security
+import androidx.compose.material.icons.filled.Smartphone
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -29,43 +33,32 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.example.ui.KitchenUiState
 
 @Composable
 fun ExtractorScreen(
     uiState: KitchenUiState,
-    onExecuteExtractMe: (Boolean) -> Unit,
-    onAcquireRootAccess: () -> Unit = {},
-    onRunJniRustBlobManager: () -> Unit = {},
-    onPatchBlobOrGenerateShim: (String, String, String, String) -> Unit = { _, _, _, _ -> },
-    onNavigateToPorter: () -> Unit,
-    onNavigateToCreation: () -> Unit
+    onExecuteExtractAll: () -> Unit,
+    onRequestRootAccess: () -> Unit,
+    onNavigateToConsole: () -> Unit
 ) {
-    var combineWithTucanaBase by remember { mutableStateOf(true) }
-    var selectedBlobForSurgery by remember { mutableStateOf("vendor.xiaomi.hardware.fingerprintextension@1.0.so") }
-    var oldSonameInput by remember { mutableStateOf("libhidltransport.so") }
-    var newSonameInput by remember { mutableStateOf("libhidlbase.so") }
-    var customShimSymbolInput by remember { mutableStateOf("_ZN7android18SurfaceComposerClient13setLayerStackERKNS_2spINS_7IBinderEEEj") }
-    val dna = uiState.gastroDnaProfile
-    val jniReport = uiState.gastroJniBlobReport
+    val report = uiState.lastExtractReport
+    val isBusy = uiState.isBusy
 
     Column(
         modifier = Modifier
@@ -74,7 +67,7 @@ fun ExtractorScreen(
             .padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        // 1. Header Banner: EXTRACTOR + GASTROengine DeviceProfiler & ShellOrchestrator
+        // 1. CARTE D'IDENTITÉ : Détection Automatique du Téléphone & Statut Root
         Card(
             colors = CardDefaults.cardColors(
                 containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
@@ -83,523 +76,377 @@ fun ExtractorScreen(
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Download,
-                        contentDescription = "EXTRACTOR",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "EXTRACTOR • Extraction Root & Device Tree (-> EXTRACT/)",
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                        Text(
-                            text = "Propulsé par GASTROengine (Root Multi-Su + Device Tree AOSP + Blobs Bruts .so)",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-
-                Text(
-                    text = "Ce module sonde l'accès Root multi-chemins (Magisk, KernelSU, APatch, /system/bin/su), extrait le Device Tree complet de votre téléphone ainsi que les partitions et binaires bruts (.so, HALs) nécessaires au portage 100% fonctionnel.",
-                    style = MaterialTheme.typography.bodySmall
-                )
-
-                Surface(
-                    color = Color(0xFF10281E),
-                    shape = RoundedCornerShape(10.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(
-                        modifier = Modifier.padding(10.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                    Box(
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.2f)),
+                        contentAlignment = Alignment.Center
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Security,
-                            contentDescription = "ShellOrchestrator Sandbox",
-                            tint = Color(0xFF00E676),
-                            modifier = Modifier.size(20.dp)
+                            imageVector = Icons.Default.Smartphone,
+                            contentDescription = "Téléphone",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(24.dp)
                         )
-                        Spacer(modifier = Modifier.width(8.dp))
+                    }
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "Fournisseur Root Actif : ${uiState.activeRootProviderLabel} | Sortie isolée : ${uiState.romForgePublicPath}/EXTRACT/",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = Color(0xFFB9F6CA),
-                            fontFamily = FontFamily.Monospace
+                            text = if (report != null) "${report.deviceBrand} ${report.deviceModel}"
+                            else "${android.os.Build.BRAND} ${android.os.Build.MODEL}",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.ExtraBold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                        Text(
+                            text = "Codename: ${if (report != null) report.deviceCodename else android.os.Build.DEVICE} • SoC: ${if (report != null) report.boardPlatform else android.os.Build.BOARD}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
-            }
-        }
 
-        // 2. Main Action Card: Root Acquisition + ExtractMe Button -> ROM_FORGE/EXTRACT/
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedButton(
-                    onClick = onAcquireRootAccess,
-                    enabled = !uiState.isBusy,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("btn_extractor_acquire_root")
-                ) {
-                    Icon(imageVector = Icons.Default.Terminal, contentDescription = "Root")
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (uiState.isRootAvailable) {
-                            "✓ Accès Root Actif (${uiState.activeRootProviderLabel}) • Re-tester"
-                        } else {
-                            "Activer l'Accès Root Multi-Chemins (Magisk / KernelSU / APatch / su)"
-                        },
-                        fontWeight = FontWeight.Bold
-                    )
-                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.primary.copy(alpha = 0.2f))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Column(modifier = Modifier.weight(1f)) {
+                    Column {
                         Text(
-                            text = "Option Base de Référence Parallèle (LineageOS 24.0 Tucana SM6150)",
-                            style = MaterialTheme.typography.bodyMedium,
+                            text = "Android ${if (report != null) report.androidRelease else android.os.Build.VERSION.RELEASE} (API ${if (report != null) report.sdkInt else android.os.Build.VERSION.SDK_INT})",
+                            style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold
                         )
                         Text(
-                            text = "Combine l'extraction réelle du téléphone avec les définitions FOD/HBM/VINTF de référence pour garantir 100% de complétude.",
+                            text = "Kernel: ${if (report != null) report.kernelVersion else (System.getProperty("os.version") ?: "Linux")}",
                             style = MaterialTheme.typography.labelSmall,
+                            fontFamily = FontFamily.Monospace,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
-                    Switch(
-                        checked = combineWithTucanaBase,
-                        onCheckedChange = { combineWithTucanaBase = it },
-                        modifier = Modifier.testTag("extractor_switch_combine_base")
-                    )
-                }
 
-                Button(
-                    onClick = { onExecuteExtractMe(combineWithTucanaBase) },
-                    enabled = !uiState.isBusy,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp)
-                        .testTag("btn_extractor_extract_me")
-                ) {
-                    Icon(imageVector = Icons.Default.Download, contentDescription = "ExtractMe")
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "ExtractMe (Dump Device Tree + Partitions + Binaires Bruts -> EXTRACT/)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    OutlinedButton(
-                        onClick = onNavigateToPorter,
-                        enabled = !uiState.isBusy,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("btn_extractor_go_porter")
+                    Surface(
+                        color = if (uiState.isRootAvailable) Color(0xFF10281E) else MaterialTheme.colorScheme.surfaceVariant,
+                        shape = RoundedCornerShape(8.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.AccountTree, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Aller vers PORTER")
-                    }
-                    OutlinedButton(
-                        onClick = onNavigateToCreation,
-                        enabled = !uiState.isBusy,
-                        modifier = Modifier
-                            .weight(1f)
-                            .testTag("btn_extractor_go_creation")
-                    ) {
-                        Icon(imageVector = Icons.Default.Build, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text("Aller vers CREATION")
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = if (uiState.isRootAvailable) Icons.Default.CheckCircle else Icons.Default.Security,
+                                contentDescription = "Root status",
+                                tint = if (uiState.isRootAvailable) Color(0xFF00E676) else MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = if (uiState.isRootAvailable) "Root Actif" else "Mode Standard",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (uiState.isRootAvailable) Color(0xFFB9F6CA) else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
                 }
             }
         }
 
-        // 3. Status of ROM_FORGE/EXTRACT/ Folder & DeviceProfiler DNA
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.FolderSpecial,
-                        contentDescription = "Dossier EXTRACT",
-                        tint = if (uiState.isExtractReady) Color(0xFF00C853) else MaterialTheme.colorScheme.secondary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = if (uiState.isExtractReady) {
-                            "Dossier EXTRACT Prêt (${uiState.extractedFilesCount} fichiers isolés)"
-                        } else {
-                            "Dossier EXTRACT en attente de ExtractMe"
-                        },
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                Text(
-                    text = "Chemin d'extraction : ${uiState.romForgePublicPath}/EXTRACT/",
-                    style = MaterialTheme.typography.labelSmall,
-                    fontFamily = FontFamily.Monospace,
-                    color = MaterialTheme.colorScheme.primary
-                )
-
-                if (dna != null) {
-                    HorizontalDivider()
-                    Text(
-                        text = "ADN Matériel Extrait par DeviceProfiler (${dna.timestamp}) :",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "• Appareil : ${dna.deviceBrand} ${dna.deviceModel} (${dna.deviceCodename})\n" +
-                                "• Plateforme SoC : ${dna.boardPlatform} • Android ${dna.androidRelease} (SDK ${dna.sdkInt})\n" +
-                                "• Noyau Kernel : ${dna.kernelVersion}\n" +
-                                "• Accès Root (ShellOrchestrator RO) : ${if (dna.rootGranted) "OUI (uid=0)" else "Mode Live/Hybride"}",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontFamily = FontFamily.Monospace
-                    )
-
-                    Text(
-                        text = "Partitions & Points de Montage Capturés :",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    dna.extractedPartitions.forEach { part ->
-                        Text(
-                            text = "  • $part",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-
-                    Text(
-                        text = "Topologie de Liens Symboliques (StructureAligner) :",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    dna.symlinksMap.forEach { (k, v) ->
-                        Text(
-                            text = "  • $k -> $v",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.secondary
-                        )
-                    }
-
-                    Text(
-                        text = "HALs & Services Init Détectés :",
-                        style = MaterialTheme.typography.labelMedium,
-                        fontWeight = FontWeight.Bold
-                    )
-                    dna.hardwareHalsDetected.forEach { hal ->
-                        Text(
-                            text = "  ✓ $hal",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-                }
-            }
-        }
-
-        // 4. JNI-Based Rust Module Card: gastro_engine_jni v2.5.0-ultra (Low-Level Library, RODATA, VNDK & Blob Auto-Porting)
+        // 2. BOUTON PRINCIPAL D'ACTION UNIQUE : Extraire Tout
         Card(
             colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.45f)
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
             ),
             modifier = Modifier.fillMaxWidth()
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Terminal,
-                        contentDescription = "JNI Rust Module",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text(
-                            text = "Module JNI Rust v2.5.0-ultra • Auto-Portage Bas-Niveau (.so ELF64, RODATA & VNDK)",
-                            style = MaterialTheme.typography.titleSmall,
-                            fontWeight = FontWeight.ExtraBold
-                        )
-                        Text(
-                            text = "Crate : app/src/main/rust/gastro_engine_jni • libgastro_engine_jni.so (7 fonctions JNI C-ABI)",
-                            style = MaterialTheme.typography.labelSmall,
-                            fontFamily = FontFamily.Monospace,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                    }
-                }
-
                 Text(
-                    text = "Moteur ultra-intelligent de portage bas-niveau : inspecte les en-têtes ELF64 (EM_AARCH64, DT_NEEDED, SONAME), désassemble les sections .rodata/.text des blobs pour extraire les vrais chemins /sys, /dev et constantes IOCTL/HBM (0x20000, 0x152), patche les SONAME in-place sans décaler .dynstr, génère les shims binaires AArch64 (libshim_gastro_*.so) et construit le pont VNDK linker64 (ld.config.vndk_bridge.txt).",
-                    style = MaterialTheme.typography.bodySmall
+                    text = "Extraction & Diagnostic Intégral",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
                 )
 
-                Button(
-                    onClick = onRunJniRustBlobManager,
-                    enabled = !uiState.isBusy,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
+                Text(
+                    text = "Un seul clic extrait l'arborescence complète, tous les HALs et blobs .so, la chaîne FOD matérielle (Vendor <-> System) et produit l'analyse IA avec 9 fichiers JSON dans sdcard/FORGER/EXTRACT/.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                // Optionnel : tester / forcer l'accès root
+                OutlinedButton(
+                    onClick = onRequestRootAccess,
+                    enabled = !isBusy,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(52.dp)
-                        .testTag("btn_extractor_jni_rust_blob_manager")
+                        .testTag("btn_request_root_access")
                 ) {
-                    Icon(imageVector = Icons.Default.Memory, contentDescription = "JNI Rust Blob Manager")
+                    Icon(imageVector = Icons.Default.Security, contentDescription = "Tester Root")
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        text = "Exécuter Auto-Portage JNI Rust (.so ELF64 + RODATA + VNDK)",
-                        style = MaterialTheme.typography.labelLarge,
+                        text = if (uiState.isRootAvailable) "✓ Accès Root Vérifié (${uiState.activeRootProviderLabel})"
+                        else "Tester / Accorder les Droits Root (su)",
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+
+                // Bouton Principal Unique
+                Button(
+                    onClick = onExecuteExtractAll,
+                    enabled = !isBusy,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.primary
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .testTag("btn_execute_extract_all")
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Download,
+                        contentDescription = "Extraire tout",
+                        modifier = Modifier.size(24.dp)
+                    )
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Text(
+                        text = if (isBusy) "Extraction en cours..." else "Extraire tout (Système + FOD + IA)",
+                        style = MaterialTheme.typography.titleSmall,
                         fontWeight = FontWeight.ExtraBold
                     )
                 }
 
-                // Interactive Surgical SONAME Patcher & Custom Shim Synthesizer
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Column(
-                        modifier = Modifier.padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Text(
-                            text = "Atelier Chirurgical JNI Rust : Patcher SONAME In-Place & Synthétiseur de Shim ELF64",
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        OutlinedTextField(
-                            value = selectedBlobForSurgery,
-                            onValueChange = { selectedBlobForSurgery = it },
-                            label = { Text("Blob .so cible (EXTRACT/ ou UNPACK/)") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("jni_input_target_blob")
+                if (isBusy) {
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        LinearProgressIndicator(
+                            progress = { uiState.activeTaskProgress.coerceIn(0f, 1f) },
+                            modifier = Modifier.fillMaxWidth()
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedTextField(
-                                value = oldSonameInput,
-                                onValueChange = { oldSonameInput = it },
-                                label = { Text("Ancien SONAME (<=)") },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("jni_input_old_soname")
-                            )
-                            OutlinedTextField(
-                                value = newSonameInput,
-                                onValueChange = { newSonameInput = it },
-                                label = { Text("Nouveau SONAME (NUL-pad)") },
-                                singleLine = true,
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .testTag("jni_input_new_soname")
-                            )
-                        }
-                        OutlinedTextField(
-                            value = customShimSymbolInput,
-                            onValueChange = { customShimSymbolInput = it },
-                            label = { Text("Symbole C++/C à exporter dans libshim_gastro_*.so (RET 0xD65F03C0)") },
-                            singleLine = true,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("jni_input_shim_symbol")
-                        )
-                        OutlinedButton(
-                            onClick = {
-                                onPatchBlobOrGenerateShim(
-                                    selectedBlobForSurgery,
-                                    oldSonameInput,
-                                    newSonameInput,
-                                    customShimSymbolInput
-                                )
-                            },
-                            enabled = !uiState.isBusy && selectedBlobForSurgery.isNotBlank(),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .testTag("btn_jni_surgical_patch_shim")
-                        ) {
-                            Icon(imageVector = Icons.Default.Build, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "Appliquer Patch SONAME In-Place & Générer Shim ELF64",
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-                    }
-                }
-
-                if (jniReport != null) {
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(
-                            modifier = Modifier.padding(10.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                            horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Text(
-                                text = "État Pont JNI : ${jniReport.jniBridgeMode}",
-                                style = MaterialTheme.typography.labelMedium,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            Text(
-                                text = "• Librairies ELF64 inspectées : ${jniReport.totalElfLibrariesScanned}\n" +
-                                    "• Blobs propriétaires auto-portés : ${jniReport.blobsTransplantedOrVerifiedCount}/${jniReport.totalProprietaryBlobsManaged}\n" +
-                                    "• Slots SONAME patchés in-place : ${jniReport.patchedSonameSlotsCount} | Shims ELF64 AArch64 : ${jniReport.generatedElf64ShimsCount}\n" +
-                                    "• Nœuds matériels .rodata découverts : ${jniReport.discoveredHardwareSysfsNodesCount} (/sys, /dev) | Constantes IOCTL/HBM : ${jniReport.discoveredHardwareIoctlCount}\n" +
-                                    "• Pont VNDK Linker64 : ${jniReport.vndkNamespaceStatus}",
+                                text = uiState.activeTaskTitle,
                                 style = MaterialTheme.typography.labelSmall,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                            Text(
+                                text = "${(uiState.activeTaskProgress * 100).toInt()}%",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
                             )
-                            if (jniReport.autoPortingActionsSummary.isNotEmpty()) {
-                                HorizontalDivider()
-                                Text(
-                                    text = "Actions d'Auto-Portage Exécutées par gastro_engine_jni :",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                jniReport.autoPortingActionsSummary.forEach { step ->
-                                    Text(
-                                        text = "  ✓ $step",
-                                        style = MaterialTheme.typography.labelSmall,
-                                        fontFamily = FontFamily.Monospace,
-                                        color = MaterialTheme.colorScheme.secondary
-                                    )
-                                }
-                            }
-                            HorizontalDivider()
-                            Text(
-                                text = "Blobs Propriétaires & Télémétrie Binaire .rodata :",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontWeight = FontWeight.Bold
-                            )
-                            jniReport.managedBlobs.forEach { blob ->
-                                Text(
-                                    text = "  • [${blob.category}] ${blob.blobName} (${blob.sizeBytes} B • SHA256=${blob.sha256Hex}) -> ${blob.actionApplied}",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                                val rodata = blob.rodataTelemetry
-                                if (rodata != null) {
-                                    val hints = (rodata.discoveredSysfsNodes + rodata.discoveredDevNodes + rodata.discoveredIoctlAndMagicHex).take(4)
-                                    if (hints.isNotEmpty()) {
-                                        Text(
-                                            text = "    ↳ .rodata/ioctl : ${hints.joinToString(" | ")}",
-                                            style = MaterialTheme.typography.labelSmall,
-                                            fontFamily = FontFamily.Monospace,
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
-                                    }
-                                }
-                            }
                         }
                     }
                 }
             }
         }
 
-        // 5. Overview of the 11 Rust Modules of GASTROengine
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(
-                modifier = Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
+        // 3. STATISTIQUES & RÉSULTAT DE L'EXTRACTION DANS SDCARD/FORGER/EXTRACT/
+        if (report != null) {
+            Card(
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                shape = RoundedCornerShape(12.dp),
+                modifier = Modifier.fillMaxWidth()
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(
-                        imageVector = Icons.Default.Memory,
-                        contentDescription = "GASTROengine Rust",
-                        tint = MaterialTheme.colorScheme.primary
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text(
-                        text = "Architecture Modulaire GASTROengine (11 Composants Rust & JNI + R.E.C.O.R.E)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
-
-                uiState.gastroSubsystems.forEach { sub ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.surface,
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(modifier = Modifier.padding(10.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    text = sub.title,
-                                    style = MaterialTheme.typography.labelMedium,
-                                    fontWeight = FontWeight.ExtraBold
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = "Terminé",
+                                tint = Color(0xFF10B981),
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Extraction Terminée avec Succès",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(6.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "sdcard/FORGER/EXTRACT",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    // Grille de résumé
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.AccountTree,
+                                    contentDescription = "Arborescence",
+                                    tint = MaterialTheme.colorScheme.primary,
+                                    modifier = Modifier.size(16.dp)
                                 )
+                                Spacer(modifier = Modifier.width(6.dp))
                                 Text(
-                                    text = sub.status,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontFamily = FontFamily.Monospace
+                                    text = "Arborescence Système",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
                                 )
                             }
                             Text(
-                                text = sub.description,
+                                text = "${report.treeNodesScannedCount} nœuds cartographiés",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Fingerprint,
+                                    contentDescription = "FOD",
+                                    tint = Color(0xFF00E676),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Chaîne FOD Détectée",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                             Text(
-                                text = "${sub.rustModuleName} • ${sub.telemetryMetric}",
-                                style = MaterialTheme.typography.labelSmall,
-                                fontFamily = FontFamily.Monospace,
-                                color = MaterialTheme.colorScheme.secondary
+                                text = "${report.fodSpecification.sensorVendor} (${report.fodSpecification.sensorRadiusPx}px)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = "Fichiers",
+                                    tint = MaterialTheme.colorScheme.secondary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Blobs & Configurations",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "${report.rawBlobsCount} blobs .so • ${report.configsCount} configs",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Psychology,
+                                    contentDescription = "IA",
+                                    tint = MaterialTheme.colorScheme.tertiary,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = "Fichiers JSON & IA",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            Text(
+                                text = "${report.jsonFilesGenerated.size} fichiers structurés",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+
+                    HorizontalDivider()
+
+                    // Dissection FOD et communication Vendor <-> System
+                    Surface(
+                        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Text(
+                                text = "Communication Vendor <-> System (FOD) :",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            Text(
+                                text = report.fodSpecification.howSystemCommunicatesWithVendor,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "Pourquoi le capteur fonctionne sur ce téléphone :",
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF00E676)
+                            )
+                            Text(
+                                text = report.fodSpecification.whyItWorksOnHostRom,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+
+                    // Bouton pour ouvrir le Journal
+                    OutlinedButton(
+                        onClick = onNavigateToConsole,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("btn_view_logs_after_extract")
+                    ) {
+                        Icon(imageVector = Icons.Default.Terminal, contentDescription = "Journal")
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Consulter le déroulement complet dans le Journal")
                     }
                 }
             }

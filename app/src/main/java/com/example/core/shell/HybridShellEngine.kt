@@ -60,6 +60,21 @@ class HybridShellEngine(private val binDir: File, private val workspaceDir: File
     var activeRootProvider: String = "Userspace Non-Root"
         private set
 
+    data class RootDiagnosticReport(
+        val isRootGranted: Boolean,
+        val suBinaryPath: String,
+        val rootProvider: String
+    )
+
+    suspend fun probeRootAccessExplicitly(onLog: ((String) -> Unit)? = null): RootDiagnosticReport = withContext(Dispatchers.IO) {
+        val success = acquireRootMultiVector(onLog)
+        RootDiagnosticReport(
+            isRootGranted = success,
+            suBinaryPath = activeSuBinaryPath,
+            rootProvider = activeRootProvider
+        )
+    }
+
     suspend fun probeRootAccess(): Boolean = withContext(Dispatchers.IO) {
         // Safe non-blocking startup check without triggering unsolicited su prompts
         val candidatePaths = listOf(

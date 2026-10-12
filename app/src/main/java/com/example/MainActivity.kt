@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Build
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material3.Icon
@@ -71,7 +72,8 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
 
     val isConsolePaneActive = uiState.currentTab == KitchenTab.CONSOLE
     val isSettingsPaneActive = uiState.currentTab == KitchenTab.HELP
-    val isUnpackRepackActive = !isConsolePaneActive && !isSettingsPaneActive
+    val isExtractorPaneActive = uiState.currentTab == KitchenTab.EXTRACTOR
+    val isUnpackRepackActive = uiState.currentTab == KitchenTab.COMPILER
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
         val isWideScreen = maxWidth >= 600.dp
@@ -125,6 +127,26 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                             )
                         },
                         modifier = Modifier.testTag("nav_pane_action")
+                    )
+
+                    NavigationBarItem(
+                        selected = isExtractorPaneActive,
+                        onClick = { viewModel.selectTab(KitchenTab.EXTRACTOR) },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.Download,
+                                contentDescription = "EXTRACT"
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = "EXTRACT",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        modifier = Modifier.testTag("nav_tab_extractor")
                     )
 
                     NavigationBarItem(
@@ -191,6 +213,18 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                             modifier = Modifier.testTag("nav_rail_compiler")
                         )
                         NavigationRailItem(
+                            selected = isExtractorPaneActive,
+                            onClick = { viewModel.selectTab(KitchenTab.EXTRACTOR) },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.Download,
+                                    contentDescription = "EXTRACT"
+                                )
+                            },
+                            label = { Text("EXTRACT") },
+                            modifier = Modifier.testTag("nav_rail_extractor")
+                        )
+                        NavigationRailItem(
                             selected = isConsolePaneActive,
                             onClick = { viewModel.selectTab(KitchenTab.CONSOLE) },
                             icon = {
@@ -230,6 +264,13 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                             .fillMaxWidth()
                     ) { targetTab ->
                         when (targetTab) {
+                            KitchenTab.EXTRACTOR -> com.example.ui.screens.ExtractorScreen(
+                                uiState = uiState,
+                                onExecuteExtractAll = viewModel::executeFullDeviceExtractAndAiDiagnostic,
+                                onRequestRootAccess = viewModel::requestRootAccess,
+                                onNavigateToConsole = { viewModel.selectTab(KitchenTab.CONSOLE) }
+                            )
+
                             KitchenTab.CONSOLE -> ConsoleHistoryScreen(
                                 uiState = uiState,
                                 portHistory = portHistory,

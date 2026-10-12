@@ -176,7 +176,9 @@ data class KitchenUiState(
     // Console saved path
     val lastSavedLogFilePath: String = "",
     // Generated Technical Manual & AI Audit PDF
-    val lastGeneratedPdfDoc: GeneratedPdfDocResult? = null
+    val lastGeneratedPdfDoc: GeneratedPdfDocResult? = null,
+    // Exhaustive EXTRACT state
+    val lastExtractReport: com.example.core.extract.ExtractExecutionReport? = null
 )
 
 class RomKitchenViewModel(application: Application) : AndroidViewModel(application) {
@@ -190,6 +192,7 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
         binDir = assetBinaryManager.getBinDir(),
         workspaceDir = assetBinaryManager.getWorkspaceDir()
     )
+    private val deviceExtractEngine = com.example.core.extract.DeviceExtractEngine(shellEngine)
     private val keyMakerEngine = KeyMakerEngine(storageManager.getRomForgePublicRoot())
     private val artGeneratorEngine = ArtGeneratorEngine(
         defaultWorkspaceDir = assetBinaryManager.getWorkspaceDir(),
@@ -1719,50 +1722,52 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // =========================================================================
-    // MODULE EXTRACTOR (ExtractMe -> ROM_FORGE/EXTRACT via GASTROengine)
+    // MODULE EXTRACTOR (ExtractMe & Full System / Tree / FOD Extraction -> FORGER/EXTRACT)
     // =========================================================================
-    fun executeExtractorExtractMe(combineWithTucanaReference: Boolean = true) {
+    fun requestRootAccess() {
         viewModelScope.launch {
-            val gsiDir = File(_uiState.value.selectedDecompiledImgFullPath)
+            _uiState.update { it.copy(isBusy = true, activeTaskTitle = "Demande et test de l'accès Root (su)...") }
+            val rootDiag = shellEngine.probeRootAccessExplicitly()
+            appendLog("[ROOT-PROBE] Résultat : Provider=${rootDiag.rootProvider} | Chemin=${rootDiag.suBinaryPath} | Accordé=${rootDiag.isRootGranted}")
+            _uiState.update {
+                it.copy(
+                    isBusy = false,
+                    activeTaskTitle = "",
+                    isRootAvailable = rootDiag.isRootGranted,
+                    activeRootProviderLabel = rootDiag.rootProvider,
+                    executionMode = if (rootDiag.isRootGranted) ExecutionMode.ROOT_LOOPBACK else ExecutionMode.NON_ROOT_USERSPACE
+                )
+            }
+        }
+    }
+
+    fun executeFullDeviceExtractAndAiDiagnostic() {
+        viewModelScope.launch {
             _uiState.update {
                 it.copy(
                     isBusy = true,
-                    activeTaskTitle = "EXTRACTOR • ExtractMe : Extraction sécurisée de l'ADN du téléphone vers ROM_FORGE/EXTRACT/...",
-                    activeTaskProgress = 0.15f
+                    activeTaskTitle = "EXTRACT • Extraction complète du téléphone (Système, Arborescence, FOD & IA)...",
+                    activeTaskProgress = 0.05f
                 )
             }
+            appendLog("==========================================================================")
+            appendLog("[EXTRACT-GLOBAL] Lancement de l'extraction exhaustive du téléphone...")
+            appendLog("[EXTRACT-GLOBAL] Destination : ${storageManager.getExtractRootDir().absolutePath}")
+            appendLog("==========================================================================")
 
-            val dnaProfile = gastroEngine.runExtractorExtractMeToExtractFolder(
-                combineWithTucanaReference = combineWithTucanaReference,
+            val report = deviceExtractEngine.executeCompleteExtraction(
+                extractRootDir = storageManager.getExtractRootDir(),
                 onProgress = { p, title ->
                     _uiState.update { it.copy(activeTaskProgress = p, activeTaskTitle = title) }
                 },
                 onLog = { appendLog(it) }
             )
 
-            storageManager.mirrorDirectoryToPublicDownloadRomForge(
-                sourceDir = storageManager.getExtractRootDir(),
-                subFolderName = "EXTRACT",
-                onLog = { appendLog(it) }
-            )
-
-            val extractionSummary = autoPorterEngine.executeExtractMeRootComponents(
-                combineWithUseBase = combineWithTucanaReference,
-                onLog = { appendLog(it) }
-            )
-            val currentPort = autoPorterEngine.analyzeStockAndGsiTrees(gsiDir) { appendLog(it) }
-            val porterPlan = gastroEngine.buildPorterPlanAndAlignStructure(gsiDir) { appendLog(it) }
-            val jniBlobReport = gastroEngine.runJniRustBlobAndLibraryManager(
-                unpackedGsiDir = gsiDir,
-                autoReconcileAndShim = true,
-                onLog = { appendLog(it) }
-            )
-
             recordActionCompleted(
-                moduleLabel = "EXTRACTOR",
-                actionTitle = "ExtractMe + Audit JNI Rust Blobs (ROM_FORGE/EXTRACT/)",
-                targetName = "${dnaProfile.deviceBrand} ${dnaProfile.deviceCodename}",
-                summaryDetail = "${dnaProfile.extractedFilesCount} fichiers isolés dans EXTRACT/ | ${jniBlobReport.discoveredHardwareSysfsNodesCount} nœuds .rodata & ${jniBlobReport.generatedElf64ShimsCount} shims ELF64"
+                moduleLabel = "EXTRACT",
+                actionTitle = "Extraction Système + Arborescence + FOD + IA",
+                targetName = "${report.deviceBrand} ${report.deviceModel}",
+                summaryDetail = "${report.rawBlobsCount} blobs .so, ${report.treeNodesScannedCount} nœuds dans l'arborescence, 9 JSON générés dans sdcard/FORGER/EXTRACT/"
             )
 
             _uiState.update {
@@ -1770,16 +1775,18 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                     isBusy = false,
                     activeTaskTitle = "",
                     activeTaskProgress = 1f,
-                    gastroDnaProfile = dnaProfile,
-                    gastroJniBlobReport = jniBlobReport,
-                    gastroSubsystems = gastroEngine.getTenRustSubsystemsStatus(),
+                    lastExtractReport = report,
+                    isRootAvailable = report.rootAccessGranted,
+                    activeRootProviderLabel = report.rootProvider,
                     isExtractReady = true,
-                    extractedFilesCount = dnaProfile.extractedFilesCount,
-                    gastroPorterPlanReport = porterPlan,
-                    portAnalysisResult = currentPort.copy(sourceExtractionSummary = extractionSummary)
+                    extractedFilesCount = report.rawBlobsCount + report.configsCount
                 )
             }
         }
+    }
+
+    fun executeExtractorExtractMe(combineWithTucanaReference: Boolean = true) {
+        executeFullDeviceExtractAndAiDiagnostic()
     }
 
     // =========================================================================

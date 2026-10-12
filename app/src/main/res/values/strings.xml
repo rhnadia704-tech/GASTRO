@@ -5,6 +5,7 @@
     <string name="mode_root">Mode Root</string>
     <string name="mode_non_root">Mode Standard</string>
     <string name="terminal_title">Journal &amp; Console</string>
+    <string name="nav_extractor">EXTRACT</string>
     <string name="btn_clear_logs">Effacer</string>
     <string name="btn_run_verifier">Vérifier</string>
 </resources>

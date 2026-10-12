@@ -107,7 +107,7 @@ fun TopSystemStatusBar(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "FORGER • UNPACK & REPACK",
+                    text = "FORGER",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                     color = MaterialTheme.colorScheme.onSurface,
@@ -115,7 +115,7 @@ fun TopSystemStatusBar(
                     overflow = TextOverflow.Ellipsis
                 )
                 Text(
-                    text = "sdcard/FORGER/UNPACK  •  sdcard/FORGER/PACKED",
+                    text = "sdcard/FORGER/UNPACK • PACKED • EXTRACT",
                     style = MaterialTheme.typography.labelSmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.primary,
