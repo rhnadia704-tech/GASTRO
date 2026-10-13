@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Settings
@@ -73,6 +74,7 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
     val isConsolePaneActive = uiState.currentTab == KitchenTab.CONSOLE
     val isSettingsPaneActive = uiState.currentTab == KitchenTab.HELP
     val isExtractorPaneActive = uiState.currentTab == KitchenTab.EXTRACTOR
+    val isPorterPaneActive = uiState.currentTab == KitchenTab.AUTO_PORTER
     val isUnpackRepackActive = uiState.currentTab == KitchenTab.COMPILER
 
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
@@ -147,6 +149,26 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                             )
                         },
                         modifier = Modifier.testTag("nav_tab_extractor")
+                    )
+
+                    NavigationBarItem(
+                        selected = isPorterPaneActive,
+                        onClick = { viewModel.selectTab(KitchenTab.AUTO_PORTER) },
+                        icon = {
+                            Icon(
+                                imageVector = Icons.Default.AccountTree,
+                                contentDescription = "PORTER"
+                            )
+                        },
+                        label = {
+                            Text(
+                                text = "PORTER",
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                fontWeight = FontWeight.Bold
+                            )
+                        },
+                        modifier = Modifier.testTag("nav_tab_porter")
                     )
 
                     NavigationBarItem(
@@ -225,6 +247,18 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                             modifier = Modifier.testTag("nav_rail_extractor")
                         )
                         NavigationRailItem(
+                            selected = isPorterPaneActive,
+                            onClick = { viewModel.selectTab(KitchenTab.AUTO_PORTER) },
+                            icon = {
+                                Icon(
+                                    imageVector = Icons.Default.AccountTree,
+                                    contentDescription = "PORTER"
+                                )
+                            },
+                            label = { Text("PORTER") },
+                            modifier = Modifier.testTag("nav_rail_porter")
+                        )
+                        NavigationRailItem(
                             selected = isConsolePaneActive,
                             onClick = { viewModel.selectTab(KitchenTab.CONSOLE) },
                             icon = {
@@ -270,6 +304,27 @@ fun RomForgeKitchenApp(viewModel: RomKitchenViewModel = viewModel()) {
                                 onExecuteExtractAll = viewModel::executeFullDeviceExtractAndAiDiagnostic,
                                 onRequestRootAccess = viewModel::requestRootAccess,
                                 onNavigateToConsole = { viewModel.selectTab(KitchenTab.CONSOLE) }
+                            )
+
+                            KitchenTab.AUTO_PORTER -> com.example.ui.screens.AutoPorterScreen(
+                                uiState = uiState,
+                                portHistory = portHistory,
+                                onSelectDecompiledImg = viewModel::selectDecompiledImgFolder,
+                                onPickCustomSafTree = viewModel::selectCustomDecompiledDirectoryUri,
+                                onExecutePortageToUnpackedGsi = viewModel::executeGsiToSystemAutoPort,
+                                onRunPorterPlanAnalysis = viewModel::runGastroPorterPlanAnalysis,
+                                onRunJniRustBlobManager = viewModel::executeGastroJniBlobAndLibraryManager,
+                                onPatchBlobOrGenerateShim = viewModel::executeSurgicalJniBlobPatchOrShim,
+                                onRunFodCompleteScan = viewModel::runGastroAiFodScan,
+                                onRunFodAiScan = viewModel::runGastroAiFodScan,
+                                onApplyFodFix1Complete = viewModel::applyOverlayOnlyZeroSignFodFix,
+                                onApplyFodFix2Workaround = viewModel::applyOverlayOnlyZeroSignFodFix,
+                                onApplyFodFix3AiAndGastroEngine = viewModel::applyFodFix3AiAndGastroEngine,
+                                onApplyIntelligentFodFix = viewModel::applyIntelligentBootSafeFodFix,
+                                onValidateBootSafety = viewModel::validateGsiBootSafety,
+                                onRollbackLastPatch = viewModel::rollbackLastFodPatch,
+                                onNavigateToExtractor = { viewModel.selectTab(KitchenTab.EXTRACTOR) },
+                                onNavigateToCreation = { viewModel.selectTab(KitchenTab.COMPILER) }
                             )
 
                             KitchenTab.CONSOLE -> ConsoleHistoryScreen(

@@ -23,7 +23,7 @@ import androidx.compose.material.icons.filled.AccountTree
 import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Build
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.CompareArrows
+import androidx.compose.material.icons.automirrored.filled.CompareArrows
 import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.FolderOpen
@@ -85,6 +85,9 @@ fun AutoPorterScreen(
     onApplyFodFix1Complete: () -> Unit,
     onApplyFodFix2Workaround: () -> Unit,
     onApplyFodFix3AiAndGastroEngine: () -> Unit,
+    onApplyIntelligentFodFix: () -> Unit = {},
+    onValidateBootSafety: () -> Unit = {},
+    onRollbackLastPatch: () -> Unit = {},
     onNavigateToExtractor: () -> Unit,
     onNavigateToCreation: () -> Unit
 ) {
@@ -103,6 +106,9 @@ fun AutoPorterScreen(
             onSelectDecompiledImg = onSelectDecompiledImg,
             onPickCustomSafTree = onPickCustomSafTree,
             onExecutePort = onExecutePortageToUnpackedGsi,
+            onApplyIntelligentFodFix = onApplyIntelligentFodFix,
+            onValidateBootSafety = onValidateBootSafety,
+            onRollbackLastPatch = onRollbackLastPatch,
             onOpenPorterPlanPage = {
                 onRunPorterPlanAnalysis()
                 currentSubPage = PorterSubPage.PORTER_PLAN_PAGE
@@ -149,6 +155,9 @@ private fun PorterMainHubPage(
     onSelectDecompiledImg: (String) -> Unit,
     onPickCustomSafTree: (Uri) -> Unit,
     onExecutePort: () -> Unit,
+    onApplyIntelligentFodFix: () -> Unit,
+    onValidateBootSafety: () -> Unit,
+    onRollbackLastPatch: () -> Unit,
     onOpenPorterPlanPage: () -> Unit,
     onOpenFodPage: () -> Unit,
     onNavigateToExtractor: () -> Unit,
@@ -353,61 +362,160 @@ private fun PorterMainHubPage(
                     }
                 }
 
+                // Action Principale Demandée : FOD fix (Portage Intelligent Sans Risque de Bootloop)
+                Button(
+                    onClick = onApplyIntelligentFodFix,
+                    enabled = !uiState.isBusy,
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(60.dp)
+                        .testTag("btn_porter_fod_fix")
+                ) {
+                    Icon(imageVector = Icons.Default.Fingerprint, contentDescription = "FOD fix")
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column(horizontalAlignment = Alignment.Start) {
+                        Text(
+                            text = "FOD fix (Portage Intelligent Sans Risque de Bootloop)",
+                            style = MaterialTheme.typography.titleSmall,
+                            fontWeight = FontWeight.ExtraBold
+                        )
+                        Text(
+                            text = "Patch direct dans UNPACK/${uiState.selectedDecompiledImgName} • Zero-APK-Touch • DSU Ready",
+                            style = MaterialTheme.typography.labelSmall
+                        )
+                    }
+                }
+
+                // Garantie Anti-Bootloop & Contrôle Statique Pré-Repack
+                Card(
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (uiState.bootSafetyReport?.isSafeToBoot == true)
+                            Color(0xFF0F2F20) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(
+                        modifier = Modifier.padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = if (uiState.bootSafetyReport?.isSafeToBoot == true) Icons.Default.CheckCircle else Icons.Default.Warning,
+                                contentDescription = "Boot Safety",
+                                tint = if (uiState.bootSafetyReport?.isSafeToBoot == true) Color(0xFF69F0AE) else MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Garantie Anti-Bootloop • Contrôle Statique Pré-Repack",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (uiState.bootSafetyReport?.isSafeToBoot == true) Color(0xFF69F0AE) else MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+
+                        if (uiState.bootSafetyReport != null) {
+                            Text(
+                                text = "• Score de sécurité boot : ${uiState.bootSafetyReport.safetyScore}/100\n" +
+                                        "• ${uiState.bootSafetyReport.summaryText}",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontFamily = FontFamily.Monospace,
+                                color = if (uiState.bootSafetyReport.isSafeToBoot) Color(0xFFE0F2F1) else MaterialTheme.colorScheme.onSurface
+                            )
+                        } else {
+                            Text(
+                                text = "Sauvegarde snapshot automatique pré-patch (.porter_backup/), vérification des permissions Unix 0644/0755, syntaxe des scripts init .rc et préservation des signatures APK.",
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = onValidateBootSafety,
+                                enabled = !uiState.isBusy,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("btn_porter_check_boot_safety")
+                            ) {
+                                Text("Vérifier Sécurité")
+                            }
+                            if (uiState.canRollbackLastPatch) {
+                                Button(
+                                    onClick = onRollbackLastPatch,
+                                    enabled = !uiState.isBusy,
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .testTag("btn_porter_rollback")
+                                ) {
+                                    Text("Rollback (Annuler)")
+                                }
+                            }
+                        }
+                    }
+                }
+
                 // Button 1: PORT (Requires an extract done by EXTRACTOR)
                 Button(
                     onClick = onExecutePort,
                     enabled = !uiState.isBusy && uiState.isExtractReady,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(56.dp)
+                        .height(52.dp)
                         .testTag("btn_porter_port")
                 ) {
                     Icon(imageVector = Icons.Default.Memory, contentDescription = "PORT")
                     Spacer(modifier = Modifier.width(10.dp))
                     Text(
-                        text = "PORT (Créer le Portage Complet vers ${uiState.selectedDecompiledImgName})",
+                        text = "PORT (Créer le Portage Complet vers ROM_FORGE/PORT/)",
                         style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold
+                        fontWeight = FontWeight.Bold
                     )
                 }
 
-                // Button 2: PORTERPLAN (Opens dedicated page)
-                Button(
-                    onClick = onOpenPorterPlanPage,
-                    enabled = !uiState.isBusy,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .testTag("btn_porter_porterplan")
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Icon(imageVector = Icons.Default.CompareArrows, contentDescription = "PORTERPLAN")
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "PORTERPLAN (Architecture & Comparatif GSI <-> Téléphone)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
-                }
+                    // Button 2: PORTERPLAN (Opens dedicated page)
+                    OutlinedButton(
+                        onClick = onOpenPorterPlanPage,
+                        enabled = !uiState.isBusy,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp)
+                            .testTag("btn_porter_porterplan")
+                    ) {
+                        Icon(imageVector = Icons.AutoMirrored.Filled.CompareArrows, contentDescription = "PORTERPLAN")
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "PORTERPLAN",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
 
-                // Button 3: FOD (Opens dedicated FOD page with SCAN, AISCAN, FOD Fix 1, 2, 3)
-                Button(
-                    onClick = onOpenFodPage,
-                    enabled = !uiState.isBusy,
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.tertiary),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(54.dp)
-                        .testTag("btn_porter_open_fod_page")
-                ) {
-                    Icon(imageVector = Icons.Default.Fingerprint, contentDescription = "FOD")
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Text(
-                        text = "FOD (SCAN • AISCAN • FOD Fix 1, 2 & 3)",
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.ExtraBold
-                    )
+                    // Button 3: FOD (Opens dedicated FOD page with SCAN, AISCAN, FOD Fix 1, 2, 3)
+                    OutlinedButton(
+                        onClick = onOpenFodPage,
+                        enabled = !uiState.isBusy,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp)
+                            .testTag("btn_porter_open_fod_page")
+                    ) {
+                        Icon(imageVector = Icons.Default.Fingerprint, contentDescription = "FOD")
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "Détail FOD",
+                            style = MaterialTheme.typography.labelLarge,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 }
             }
         }

@@ -179,7 +179,10 @@ data class KitchenUiState(
     val lastGeneratedPdfDoc: GeneratedPdfDocResult? = null,
     // Exhaustive EXTRACT state
     val lastExtractReport: com.example.core.extract.ExtractExecutionReport? = null,
-    val selectedExtractUnpackedTarget: String = ""
+    val selectedExtractUnpackedTarget: String = "",
+    // Boot Safety & Anti-Bootloop state (PORTER FOD Fix)
+    val bootSafetyReport: com.example.modules.porter.BootSafetyReport? = null,
+    val canRollbackLastPatch: Boolean = false
 )
 
 class RomKitchenViewModel(application: Application) : AndroidViewModel(application) {
@@ -412,7 +415,10 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                 onLog = { appendLog(it) }
             )
 
-            appendLog("[UNPACK-SELECT] Système décompilé sélectionné : UNPACK/${targetDir.name} (${apks.size} APKs détectés)")
+            val hasSnap = com.example.modules.porter.BootSafetyEngine.hasSnapshot(targetDir)
+            val safetyReport = com.example.modules.porter.BootSafetyEngine.validateStaticPreRepack(targetDir) { appendLog(it) }
+
+            appendLog("[UNPACK-SELECT] Système décompilé sélectionné : UNPACK/${targetDir.name} (${apks.size} APKs détectés, Sécurité Boot: ${safetyReport.safetyScore}/100)")
             _uiState.update {
                 it.copy(
                     selectedDecompiledImgName = targetDir.name,
@@ -421,7 +427,9 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                     macPermissionsPreview = macXml,
                     preFlightItems = preFlight,
                     portAnalysisResult = portAnalysis,
-                    recoreBrainReport = recoreReport
+                    recoreBrainReport = recoreReport,
+                    bootSafetyReport = safetyReport,
+                    canRollbackLastPatch = hasSnap
                 )
             }
         }
@@ -2025,6 +2033,127 @@ class RomKitchenViewModel(application: Application) : AndroidViewModel(applicati
                     isExtractReady = gastroEngine.isExtractFolderPopulated(),
                     extractedFilesCount = gastroEngine.countExtractedFiles(),
                     verificationSummary = summary
+                )
+            }
+        }
+    }
+
+    /**
+     * Action "FOD fix" Intelligente du module PORTER :
+     * Modifie directement le dossier de la GSI unpackée sélectionnée en liste déroulante :
+     * 1. Sauvegarde automatique snapshot pré-patch (.porter_backup/) pour rollback garanti.
+     * 2. Injection modulaire isolée sans altérer aucun APK existant (Overlays RRO, init.fod.porter.rc, sysfs permissions, props).
+     * 3. Contrôle statique pré-repack (Boot Safety Check) certifiant le démarrage sous DSU Sideloader.
+     */
+    fun applyIntelligentBootSafeFodFix() {
+        viewModelScope.launch {
+            val gsiDir = File(_uiState.value.selectedDecompiledImgFullPath)
+            _uiState.update {
+                it.copy(
+                    isBusy = true,
+                    activeTaskTitle = "PORTER • FOD Fix Intelligent Sans Risque de Bootloop sur ${gsiDir.name}...",
+                    activeTaskProgress = 0.25f
+                )
+            }
+            appendLog("==========================================================================")
+            appendLog("[PORTER-FOD-FIX] Démarrage du portage FOD intelligent sur ${gsiDir.name}...")
+            appendLog("==========================================================================")
+
+            val portResult = autoPorterEngine.applyIntelligentBootSafeFodFix(
+                targetUnpackedGsiDir = gsiDir,
+                onLog = { appendLog(it) }
+            )
+
+            storageManager.mirrorDirectoryToPublicDownloadRomForge(
+                sourceDir = gsiDir,
+                subFolderName = "UNPACK/${gsiDir.name}",
+                onLog = { appendLog(it) }
+            )
+
+            val safetyReport = com.example.modules.porter.BootSafetyEngine.validateStaticPreRepack(gsiDir) { appendLog(it) }
+            val hasSnap = com.example.modules.porter.BootSafetyEngine.hasSnapshot(gsiDir)
+
+            recordActionCompleted(
+                moduleLabel = "PORTER • FOD Fix",
+                actionTitle = "FOD Fix Intelligent (Direct UNPACK • Zero-APK-Touch)",
+                targetName = gsiDir.name,
+                summaryDetail = "Snapshot créé | Overlays RRO + init.fod.porter.rc injectés | Sécurité Boot: ${safetyReport.safetyScore}/100"
+            )
+
+            _uiState.update {
+                it.copy(
+                    isBusy = false,
+                    activeTaskTitle = "",
+                    activeTaskProgress = 1f,
+                    portAnalysisResult = portResult,
+                    bootSafetyReport = safetyReport,
+                    canRollbackLastPatch = hasSnap
+                )
+            }
+        }
+    }
+
+    /**
+     * Contrôle statique de sécurité du boot pré-repack (Syntaxe .rc, permissions 0644/0755, contextes SELinux)
+     */
+    fun validateGsiBootSafety() {
+        viewModelScope.launch {
+            val gsiDir = File(_uiState.value.selectedDecompiledImgFullPath)
+            _uiState.update {
+                it.copy(
+                    isBusy = true,
+                    activeTaskTitle = "Vérification Statique Pré-Repack (Sécurité Boot DSU) sur ${gsiDir.name}...",
+                    activeTaskProgress = 0.50f
+                )
+            }
+            val safetyReport = com.example.modules.porter.BootSafetyEngine.validateStaticPreRepack(gsiDir) { appendLog(it) }
+            val hasSnap = com.example.modules.porter.BootSafetyEngine.hasSnapshot(gsiDir)
+            appendLog("[BOOT-SAFETY] Résultat : Score=${safetyReport.safetyScore}/100 | Sûr=${safetyReport.isSafeToBoot}")
+
+            _uiState.update {
+                it.copy(
+                    isBusy = false,
+                    activeTaskTitle = "",
+                    activeTaskProgress = 1f,
+                    bootSafetyReport = safetyReport,
+                    canRollbackLastPatch = hasSnap
+                )
+            }
+        }
+    }
+
+    /**
+     * Restauration immédiate en 1 clic de l'état initial avant portage
+     */
+    fun rollbackLastFodPatch() {
+        viewModelScope.launch {
+            val gsiDir = File(_uiState.value.selectedDecompiledImgFullPath)
+            _uiState.update {
+                it.copy(
+                    isBusy = true,
+                    activeTaskTitle = "Restauration du Snapshot Pré-Patch sur ${gsiDir.name}...",
+                    activeTaskProgress = 0.50f
+                )
+            }
+            appendLog("[ROLLBACK] Restauration du snapshot initial pour ${gsiDir.name}...")
+            val success = com.example.modules.porter.BootSafetyEngine.restoreLastSnapshot(gsiDir) { appendLog(it) }
+            val safetyReport = if (success) com.example.modules.porter.BootSafetyEngine.validateStaticPreRepack(gsiDir) { appendLog(it) } else null
+            val hasSnap = com.example.modules.porter.BootSafetyEngine.hasSnapshot(gsiDir)
+
+            recordActionCompleted(
+                moduleLabel = "PORTER • Rollback",
+                actionTitle = "Restauration Snapshot Pré-Patch",
+                targetName = gsiDir.name,
+                summaryDetail = if (success) "Dossier GSI rétabli à l'état initial exact" else "Échec de restauration"
+            )
+
+            _uiState.update {
+                it.copy(
+                    isBusy = false,
+                    activeTaskTitle = "",
+                    activeTaskProgress = 1f,
+                    bootSafetyReport = safetyReport,
+                    canRollbackLastPatch = hasSnap
                 )
             }
         }

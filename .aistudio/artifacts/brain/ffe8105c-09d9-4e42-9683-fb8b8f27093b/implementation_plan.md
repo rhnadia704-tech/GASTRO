@@ -1,100 +1,120 @@
-# Plan d'Implémentation : EXTRACT Intelligent & Universel (Tout Appareil & Toute GSI) avec Désassemblage Binaire & IA Explicative
+# Plan d'Implémentation Révisé : Moteur de Portage Intelligent "PORTER", FOD Fix & Protection Anti-Bootloop 100% Factuelle
 
-## 1. Vision & Principes Directeurs
-
-1. **Préservation Totale de l'Existant** :
-   * Conserver à 100% les fonctionnalités déjà opérationnelles d'**EXTRACT** : arborescence complète (`full_device_tree_map.json`), détection Superuser (`su`), analyseur ELF des dépendances (`DT_NEEDED`), extraction des blobs `/vendor`, journaux détaillés en temps réel, et stockage dans `/sdcard/FORGER/EXTRACT`.
-
-2. **Universalité & Intelligence Agnostique (Tout Appareil, Tout SoC, Toute GSI)** :
-   * Ne pas limiter l'extraction ou le diagnostic à un seul modèle : le moteur détecte dynamiquement les caractéristiques matérielles de **n'importe quel smartphone** (SoC Qualcomm Snapdragon, MediaTek Dimensity/Helio, Samsung Exynos, Google Tensor, Unisoc) et le type de capteur biométrique (Optique sous l'écran, Ultrasonique 3D Sonic, ou capacitif latéral/arrière).
-   * Compatible avec **n'importe quelle GSI** (Android 11 à 16+, AOSP, LineageOS, PixelOS, crDroid, etc.) unpackée dans `FORGER/Data/IMGSTRACT` ou présente dans les répertoires UNPACK.
-
-3. **Complétude Système + Vendor** :
-   * Puisqu'une GSI réutilise le vendor du téléphone hôte tout en remplaçant la partition `/system`, l'outil extrait désormais **aussi les composants clés du `/system` hôte** (framework, `services.jar`, `SystemUI`, `lib64`, interfaces AIDL/HIDL, `plat_file_contexts`, overlays).
-
-4. **Désassemblage & Comparatif Binaire Approfondi** :
-   * Désassemblage et inspection du bytecode Dalvik/ART (DEX) des deux systèmes pour cartographier les classes et méthodes d'intégration matérielle.
-   * Extraction des tables de symboles dynamiques ELF (`.dynsym`, `.symtab`, exports/imports JNI) des bibliothèques système et vendor.
-
-5. **IA Explicative Enrichie** :
-   * Analyse didactique expliquant pas-à-pas **pourquoi le capteur fonctionne sur le téléphone actuel** (chaîne continue Driver ➔ Vendor HAL ➔ Extension constructeur ➔ Hooks services.jar ➔ Couche affichage / HBM) et **pourquoi il échoue sur la GSI** (rupture des extensions propriétaires AOSP, absence d'illumination optique ou d'accès binder/SELinux), avec des recommandations de portage universelles.
+## Résumé Exécutif
+Ce plan révisé intègre l'ensemble des exigences exprimées par l'utilisateur :
+1. **Conservation intégrale et enrichissement de l'EXTRACT existant** : aucune fonctionnalité antérieure n'est retirée. L'extraction est rendue plus intelligente et factuelle à 100% (zéro hallucination, scan exhaustif des HALs biometrics, nœuds HBM/OLED réels, VINTF, propriétés vendor et dépendances ELF).
+2. **Moteur intelligent de compréhension et de portage** : corrélation entre les extractions du téléphone et l'inspection de la GSI décompressée (`UNPACK/`) pour résoudre la rupture de communication avec le vendor.
+3. **Solution intelligente anti-bootloop sans risque de crash** :
+   - Préservation stricte des fichiers et APKs d'origine de la GSI.
+   - Système de sauvegarde/snapshot automatique pré-patch et rollback immédiat en un clic.
+   - Injection déclarative et modulaire (overlays RRO, fichier d'initialisation dédié `/system/etc/init/init.fod.porter.rc`, propriétés vendor).
+   - Validateur statique pré-repack vérifiant les permissions (0644/0755), la syntaxe `init.rc` et les contextes SELinux avant tout repack pour garantir le boot sous DSU Sideloader.
+4. **Rubrique PORTER avec menu déroulant et action "FOD Fix"**.
 
 ---
 
-## 2. Architecture Technique Détaillée
+## Retours & Réponses Utilisateur Confirmées
 
-### A. Moteur d'Extraction Universel (`DeviceExtractEngine.kt`)
-* **Détection Dynamique de l'Écosystème Matériel** :
-  * Détection du fabricant (`ro.product.manufacturer`, `ro.product.vendor.manufacturer`) : Xiaomi, Samsung, OnePlus, Oppo, Vivo, Motorola, Realme, Asus, Google, etc.
-  * Détection du type de capteur et des extensions constructeur :
-    * Xiaomi/Redmi : `vendor.xiaomi.hardware.fingerprintextension`, Goodix/Focaltech optical.
-    * Samsung : `vendor.samsung.hardware.biometrics.fingerprint`, Ultrasonic/Optical.
-    * OnePlus/Oppo/Realme : `vendor.oplus.hardware.biometrics.fingerprint`.
-    * Asus/Motorola : HALs Goodix/Egis/FPC.
-* **Extraction Système Complète (`SYSTEM`)** :
-  * Fichiers DEX/Java clés : `/system/framework/services.jar`, `/system/framework/framework.jar`, `/system/priv-app/SystemUI/SystemUI.apk`.
-  * Bibliothèques système : `/system/lib64/libandroid_runtime.so`, `/system/lib64/libbiometrics_fingerprint.so`, `/system/lib64/libhidlbase.so`, `/system/lib64/libbinder.so`.
-  * Matrices VINTF et règles SELinux : `/system/etc/vintf/`, `/system/etc/selinux/plat_file_contexts`.
-  * Overlays d'affichage et de configuration : `/system/product/overlay/`, `/system/vendor/overlay/`.
-* Organisation dans `/sdcard/FORGER/EXTRACT/` :
-  * `full_device_tree_map.json` (arborescence intégrale existante préservée)
-  * `extracted_system_inventory.json` (catalogue complet des fichiers système)
-  * `SYSTEM/` et `VENDOR/` avec les binaires et fichiers de configuration.
-
-### B. Moteur de Désassemblage Universel DEX & ELF (`BinaryDisassemblyEngine.kt`)
-* **Parseur de Bytecode DEX Dalvik/ART natif Kotlin** :
-  * Lecture des en-têtes DEX (`dex\n035`, `dex\n037`, `dex\n038`, `dex\n039`).
-  * Extraction et filtrage intelligent des définitions de classes (`class_def_item`) et prototypes de méthodes (`method_id_item`).
-  * Scan des paquetages biométriques universels :
-    * Standard AOSP : `android.hardware.biometrics.*`, `com.android.server.biometrics.*`.
-    * Extensions constructeurs : `vendor.*.hardware.biometrics.*`, `vendor.*.hardware.fingerprintextension.*`.
-    * Couche UI/Keyguard : `com.android.systemui.biometrics.*`.
-* **Parseur de Symboles ELF & JNI** :
-  * Lecture des segments dynamiques ELF (format ELF32 et ELF64, Little Endian).
-  * Extraction des tables de chaînes (`.dynstr`) et symboles (`.dynsym`) : fonctions exportées, fonctions importées non résolues (UNDEF), et passerelles JNI (`Java_*`).
-* **Comparateur GSI vs Système Téléphone** :
-  * Analyse différentielle identifiant :
-    1. Classes et méthodes présentes dans le téléphone hôte mais absentes de la GSI.
-    2. Symboles JNI et dépendances natives absentes ou en conflit de version.
-    3. Interfaces AIDL/HIDL manquantes.
-
-### C. Moteur d'Analyse IA Approfondie (`FodAiDiagnosticEngine.kt`)
-* Analyse automatisée générant un diagnostic structuré multi-niveaux pour n'importe quel combo Appareil / GSI :
-  1. **Autopsie Téléphone Hôte (Pourquoi ça fonctionne)** :
-     * Explication claire de la chaîne matérielle et logicielle spécifique au constructeur détecté.
-     * Rôle des classes propriétaires et du contrôle de la dalle d'affichage (HBM, dimlayer).
-  2. **Diagnostic GSI (Pourquoi ça ne fonctionne pas sur la GSI)** :
-     * Identification exacte de la rupture (ex: GSI AOSP utilise `Fingerprint21` générique et n'appelle pas l'extension vendor, ou absence de gestion de la lumière optique).
-     * Cartographie des classes et symboles manquants trouvés par le désassembleur.
-  3. **Plan de Remédiation Universel (Comment faire fonctionner le portage)** :
-     * Overlays RRO universels pour Treble / PHH (ex: coordonnées FOD, seuil de luminosité, nœud sysfs HBM).
-     * Shims de compatibilité natifs pour les fonctions C++ manquantes.
-     * Règles de redirection Binder et correctifs de permissions SELinux.
-* Enregistrement dans `/sdcard/FORGER/Data/IMGSTRACT/universal_ai_porting_diagnostic.json`.
-
-### D. Interface Graphique Interactive dans la Carte FOD (`FodVisualComparisonCard.kt`)
-* Panneau interactif dépliable sous le graphique Recharts/Canvas :
-  * **Sélecteur de Mode** : Vue synthétique / Inspection binaire détaillée.
-  * **Bloc Explicatif Didactique "Pourquoi ça marche / Pourquoi ça échoue"** avec badges visuels clairs.
-  * **Explorateur de Désassemblage Dépliable** : Liste filtrable des classes DEX et symboles ELF (Filtre par "Écarts uniquement", "Biométrie/FOD", "Tous").
-  * **Bouton d'Exportation** : Possibilité de copier le rapport technique ou de l'exporter en JSON/Markdown.
+> [!IMPORTANT]
+> - **Conservation d'EXTRACT** : Tout le code d'extraction existant est conservé et enrichi, sans perte de données.
+> - **Stratégie Anti-Bootloop "Solution Intelligente"** : Sauvegarde instantanée pré-patch, injection additive isolée (aucun binaire ni APK écrasé), et restauration en un clic.
+> - **Validation Pré-Repack (Choix 1 validé)** : Contrôle statique automatique de l'intégrité de la GSI modifiée (syntaxe init, permissions chmod standard, contextes SELinux) avant de valider l'image prête pour DSU Sideloader.
+> - **Factualité 100% (Zéro Hallucination)** : Seuls les fichiers, nœuds réels du téléphone et composants réels de la GSI sont inspectés et cités.
 
 ---
 
-## 3. Plan d'Exécution par Étapes
+## 1. Architecture Globale du Système
 
-1. **Développement du moteur de désassemblage universel `BinaryDisassemblyEngine.kt`** :
-   * Parseur DEX Kotlin léger et rapide (extraction classes, méthodes et interfaces).
-   * Extension du parseur ELF pour extraire les symboles dynamiques `.dynsym` et tables JNI.
-2. **Mise à jour de `DeviceExtractEngine.kt`** :
-   * Intégration de l'extraction de `/system` (framework, services, SystemUI, lib64, configs) tout en préservant 100% de la logique d'extraction `/vendor` existante.
-   * Détection dynamique des caractéristiques du téléphone hôte et du format de la GSI sélectionnée.
-3. **Création du moteur IA explicatif `FodAiDiagnosticEngine.kt`** :
-   * Génération de l'autopsie détaillée et des recommandations de portage universelles.
-4. **Mise à jour de `RomKitchenViewModel.kt`** :
-   * Liaison entre les résultats de désassemblage, l'analyse IA enrichie et l'état de l'UI.
-5. **Enrichissement de `FodVisualComparisonCard.kt` et `ExtractorScreen.kt`** :
-   * Intégration du panneau dépliable d'inspection binaire et de l'explication IA pas-à-pas.
+```
+┌────────────────────────────────────────────────────────────────────────┐
+│                        TÉLÉPHONE HÔTE & VENDOR                         │
+│  • Scan partitions réelles (/vendor, /system, /apex, /odm)             │
+│  • HALs réels (android.hardware.biometrics.fingerprint@2.x / AIDL)     │
+│  • Nœuds réels sysfs (HBM, OLED display, FOD dimming, /dev/...)        │
+│  • VINTF manifest & compatibility matrix, propriétés persist.*         │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Scan Factuel 100% Enrichi
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│              EXTRACT & IMGSTRACT HAUTE-FIDÉLITÉ (FACTUEL)              │
+│  • DeviceExtractEngine : Collecte existante conservée + enrichie       │
+│  • UnpackedImageInspector : Scan miroir du dossier GSI unpacké         │
+│  • BinaryDisassemblyEngine : Dépendances réelles DT_NEEDED & .dynsym   │
+│  • FodAiDiagnosticEngine : Prompt factuel strict anti-hallucination    │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Analyse croisée
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                  MOTEUR DE PORTAGE INTELLIGENT (PORTER)                │
+│  • Sélecteur déroulant de GSI décompressée (dossiers UNPACK/)          │
+│  • Bouton majeur "FOD Fix"                                             │
+│  • Système Anti-Bootloop Intelligent :                                 │
+│    - Snapshot & Sauvegarde automatique pré-patch                       │
+│    - Injection modulaire isolée (RRO Overlay + init.fod.porter.rc)     │
+│    - Validateur statique pré-repack (SELinux, chmod 0644/0755, syntaxe)│
+│    - Option de Rollback instantané en cas de doute                     │
+└───────────────────────────────────┬────────────────────────────────────┘
+                                    │ Dossier GSI patché et certifié
+                                    ▼
+┌────────────────────────────────────────────────────────────────────────┐
+│                  DOSSIER GSI UNPACKÉ SÉCURISÉ POUR DSU                 │
+│  • Démarrage préservé à 100% sans risque de bootloop                   │
+│  • Prêt pour repack et installation via DSU Sideloader                 │
+└────────────────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 2. Détail des Composants & Améliorations
+
+### A. Enrichissement d'EXTRACT (Zéro régression, 100% Factuel)
+- Maintien de tous les modules de collecte existants (`DeviceExtractEngine`, inspection des répertoires, props, VINTF, services binder).
+- Enrichissement ciblé pour le FOD :
+  - Détection automatique des nœuds d'illumination optique sous `/sys/class/drm/`, `/sys/devices/virtual/`, `/sys/class/backlight/` et `/sys/class/touch/`.
+  - Extraction des descripteurs de capteur (dimensions d'écran, coordonnées FOD, surface de l'icône empreinte dans les overlays vendor).
+  - Détection de la pile HIDL/AIDL et des bibliothèques d'extensions propriétaires (`vendor.display.config`, `vendor.goodix`, etc.).
+  - Remplacement de tout texte simulé par les résultats factuels du shell et des lectures directes.
+
+### B. Moteur Anti-Bootloop Intelligent (`BootSafetyEngine.kt`)
+Pour garantir qu'une GSI modifiée ne causera aucun crash au boot :
+1. **Snapshot Pré-Patch** : Avant toute modification du dossier GSI, création d'un index d'intégrité et sauvegarde des fichiers touchés dans `.porter_backup/`.
+2. **Architecture Additive Isolée** :
+   - Aucune modification de fichier APK existant (`services.jar`, `SystemUI.apk` restent intacts).
+   - Création de fichiers dédiés étanches :
+     - `/system/product/overlay/FodVendorOverlay.apk` (ou déclaration RRO) pour positionner le cercle FOD et le flag HBM sans modifier le code.
+     - `/system/etc/init/init.fod.porter.rc` : script d'init indépendant qui règle les permissions des nœuds sysfs (`chmod 0666 /sys/class/drm/...`) et initialise les ponts de compatibilité au démarrage.
+     - `/system/etc/prop.default` : ajout non-destructif des propriétés vendor requises.
+3. **Validateur Statique Pré-Repack (Vérification Statique Complète)** :
+   - Contrôle syntaxique du fichier `.rc` (analyse lexicale des blocs `on init`, `on boot`, `service`).
+   - Contrôle des permissions Unix : vérification que les fichiers ajoutés ont les masques 0644 (fichiers système, overlays) ou 0755 (scripts exécutables).
+   - Contrôle des contextes SELinux virtuels (`u:object_r:system_file:s0`).
+   - Détection d'erreurs de syntaxe dans les fichiers de propriétés.
+   - Génération d'un badge de certification : **"Boot Safety Validé : 0 risque détecté"**.
+4. **Bouton de Restauration / Rollback** : Possibilité de restaurer le dossier GSI à son état initial exact en un clic.
+
+### C. Rubrique PORTER & Interface UI (`AutoPorterScreen.kt`)
+- **Sélecteur déroulant** listant les images décompressées dans `UNPACK/`.
+- **Card d'Analyse Intelligente** : Affichage comparatif factuel "Pourquoi ça marche sur le téléphone vs Pourquoi ça bloque sur la GSI".
+- **Bouton d'Action "FOD Fix"** : Lancement du processus complet (Snapshot -> Injection -> Vérification statique -> Rapport de certification).
+- **Console d'Exécution en Direct** : Télémétrie pas-à-pas montrant chaque action réalisée, permissions appliquées et vérifications réussies.
+- **Bouton "Rollback / Annuler le patch"** actif après toute modification.
+
+---
+
+## 3. Plan d'Exécution Fichier par Fichier
+
+1. **`app/src/main/java/com/example/modules/porter/BootSafetyEngine.kt` (Nouveau)** :
+   - Moteur de snapshot pré-patch, de contrôle statique (SELinux, permissions Unix 0644/0755, syntaxe rc), et de rollback sécurisé.
+2. **`app/src/main/java/com/example/modules/porter/AutoPorterEngine.kt` (Mise à jour)** :
+   - Enrichissement du moteur avec la méthode `applyIntelligentFodFix(targetDir, extractData)` utilisant `BootSafetyEngine`.
+   - Génération sécurisée des configurations FOD (overlay RRO, init.rc isolé, permissions sysfs).
+3. **`app/src/main/java/com/example/core/extract/DeviceExtractEngine.kt` & `FodComparativeEngine.kt` (Mise à jour)** :
+   - Préservation de toutes les méthodes d'extraction existantes.
+   - Enrichissement des nœuds FOD, HBM, et bibliothèques HIDL/AIDL.
+   - Élimination absolue des hallucinations et données fictives.
+4. **`app/src/main/java/com/example/core/extract/FodAiDiagnosticEngine.kt` (Mise à jour)** :
+   - Renforcement du prompt IA pour une explication factuelle rigoureuse ("Téléphone vs GSI") sans inventer de composants.
+5. **`app/src/main/java/com/example/ui/screens/AutoPorterScreen.kt` (Mise à jour)** :
+   - Intégration du sélecteur déroulant de GSI unpackée, du bouton "FOD Fix", du validateur statique anti-bootloop et du journal interactif.
 6. **Vérification & Compilation** :
-   * Tests unitaires Robolectric (`gradle :app:testDebugUnitTest`).
-   * Vérification de compilation finale (`compile_applet`).
+   - Validation par `compile_applet` pour garantir l'absence de toute erreur de syntaxe ou de régression.
